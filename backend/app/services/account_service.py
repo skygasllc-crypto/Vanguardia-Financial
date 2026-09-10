@@ -147,6 +147,15 @@ async def list_accounts(db: AsyncSession, user_id: uuid.UUID, account_type: Acco
     return list((await db.execute(query.order_by(Account.account_type, Account.created_at))).scalars().all())
 
 
+class AccountNotFoundError(ValueError):
+    """No such account, or it belongs to someone else.
+
+    Subclasses ValueError so the callers that already catch that keep working,
+    while new code can catch this specifically and answer 404 rather than
+    letting it escape as a 500.
+    """
+
+
 async def resolve_account(
     db: AsyncSession,
     user_id: uuid.UUID,
@@ -154,6 +163,7 @@ async def resolve_account(
     account_id: uuid.UUID | None = None,
     account_type: AccountType | None = None,
     currency: str | None = None,
+    for_update: bool = False,
 ) -> Account:
     """The account an operation should act on.
 
@@ -161,11 +171,20 @@ async def resolve_account(
     the primary account of the requested type is used, and one is created if
     the user has none — which keeps every existing caller working without
     having to know about multiple accounts.
+
+    `for_update` locks the row for the rest of the transaction. Any caller
+    about to read a balance, decide against it and then write must pass it:
+    without the lock two concurrent requests read the same balance, both
+    conclude there is enough, and both commit — which is how five orders got
+    opened against margin for one.
     """
     if account_id is not None:
-        account = await db.get(Account, account_id)
+        query = select(Account).where(Account.id == account_id)
+        if for_update:
+            query = query.with_for_update()
+        account = (await db.execute(query)).scalar_one_or_none()
         if account is None or account.user_id != user_id:
-            raise ValueError("Account not found.")
+            raise AccountNotFoundError("Account not found.")
         return account
 
     account_type = account_type or AccountType.DEMO
@@ -177,6 +196,8 @@ async def resolve_account(
         Account.currency == currency,
         Account.is_active == True,  # noqa: E712
     ).order_by(Account.is_primary.desc(), Account.created_at)
+    if for_update:
+        query = query.with_for_update()
     account = (await db.execute(query)).scalars().first()
     if account is not None:
         return account
@@ -224,7 +245,13 @@ async def account_metrics(db: AsyncSession, account: Account) -> dict:
         )
     )).scalar() or 0))
 
-    balance = Decimal(account.available_balance)
+    # Held funds are still the user's money — they are removed from
+    # `available_balance` when a withdrawal is raised, so they have to be added
+    # back here or the account card shows the balance dropping the moment a
+    # request is made, and shows it again as a cliff in the equity curve for a
+    # withdrawal that may yet be rejected. `withdrawable` below is the figure
+    # that is meant to exclude them.
+    balance = (Decimal(account.available_balance) + Decimal(account.locked_balance)).quantize(Decimal("0.01"))
     equity = (balance + unrealized).quantize(Decimal("0.01"))
     margin_used = Decimal(account.margin_used)
     free_margin = (equity - margin_used).quantize(Decimal("0.01"))

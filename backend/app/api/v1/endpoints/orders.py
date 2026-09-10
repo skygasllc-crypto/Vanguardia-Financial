@@ -10,6 +10,7 @@ from app.models.enums import AccountType
 from app.models.order import Order
 from app.models.user import User
 from app.schemas.trading import OrderCreate, OrderOut
+from app.services.account_service import AccountNotFoundError
 from app.services.trading_service import TradingError, cancel_order, place_order
 
 router = APIRouter()
@@ -34,6 +35,11 @@ async def list_orders(
 async def create_order(payload: OrderCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     try:
         order, _trade, _position = await place_order(db, user, payload)
+    except AccountNotFoundError as exc:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail={"error": {"code": "ACCOUNT_NOT_FOUND", "message": "Account not found."}},
+        ) from exc
     except TradingError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"error": {"code": "ORDER_FAILED", "message": str(exc)}})
     return order

@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.admin_position import AdminPosition
 from app.models.asset import Asset
-from app.models.enums import DataSource, PositionStatus
+from app.models.enums import DataSource, PositionStatus, TransactionType
 from app.models.position import Position
 from app.models.trade import Trade
 from app.models.user_financial_settings import UserFinancialSettings
@@ -77,18 +77,45 @@ async def _build_engine_summary(
     # last 24 hours. Previously this reported total unrealised P&L, which is
     # not a daily figure at all — a position held for a month showed its whole
     # lifetime gain as "today".
+    from app.models.transaction_ledger import TransactionLedger
+
     since = datetime.now(timezone.utc) - timedelta(hours=24)
-    opening_equity = (await db.execute(
-        select(EquitySnapshot.equity)
+    opening_row = (await db.execute(
+        select(EquitySnapshot.equity, EquitySnapshot.taken_at)
         .where(EquitySnapshot.account_id == account.id, EquitySnapshot.taken_at >= since)
         .order_by(EquitySnapshot.taken_at)
         .limit(1)
-    )).scalar()
+    )).first()
 
-    current_equity = account.available_balance + total_unrealized
-    if opening_equity is not None and Decimal(str(opening_equity)) > 0:
-        opening = Decimal(str(opening_equity))
-        daily_pl = (current_equity - opening).quantize(Decimal("0.01"))
+    # Held funds are still the user's, so equity counts them — matching
+    # `account_metrics`, which is what wrote the snapshot being compared
+    # against. Leaving `locked_balance` out here would read a withdrawal
+    # request as an instant loss.
+    current_equity = account.available_balance + account.locked_balance + total_unrealized
+
+    if opening_row is not None and Decimal(str(opening_row[0])) > 0:
+        opening = Decimal(str(opening_row[0]))
+
+        # Money moving in or out is not performance. Without this a $10,000
+        # deposit reads as a $10,000 profit for the day, and an approved
+        # withdrawal as a loss of the same size. Trading entries are left in —
+        # those are the actual result. `amount` is stored unsigned, so the
+        # signed movement comes from the balance either side of the entry.
+        external = Decimal(str((await db.execute(
+            select(func.coalesce(func.sum(TransactionLedger.balance_after - TransactionLedger.balance_before), 0))
+            .where(
+                TransactionLedger.account_id == account.id,
+                TransactionLedger.created_at >= opening_row[1],
+                TransactionLedger.transaction_type.in_((
+                    TransactionType.DEPOSIT,
+                    TransactionType.WITHDRAWAL,
+                    TransactionType.ADMIN_CREDIT,
+                    TransactionType.ADMIN_DEBIT,
+                )),
+            )
+        )).scalar() or 0))
+
+        daily_pl = (current_equity - opening - external).quantize(Decimal("0.01"))
         daily_pl_pct = (daily_pl / opening * 100).quantize(Decimal("0.01"))
     else:
         # No snapshot yet — say nothing rather than invent a number.

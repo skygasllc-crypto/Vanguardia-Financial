@@ -56,36 +56,50 @@ DEPOSIT_WALLETS = [
 ]
 
 
-async def seed_deposit_wallets(db) -> None:
-    """Seed deposit wallet addresses."""
+async def seed_deposit_wallets(db, overwrite: bool = False) -> None:
+    """Insert any missing deposit wallets.
+
+    Existing rows are left alone unless `overwrite` is set. This runs on every
+    deploy, and these rows are editable by an admin at runtime
+    (`PATCH /deposits/admin/wallets/{id}`) — rewriting them from the constants
+    above on each deploy would silently revert an address an admin had
+    corrected in production, and put the wire-transfer placeholder text back in
+    front of users.
+
+    Pass `--overwrite` deliberately, from a shell, to roll an address over
+    from this file.
+    """
     for wallet_data in DEPOSIT_WALLETS:
-        # Match on currency_id and update in place. This used to skip anything
-        # that already existed, which meant changing an address above did
-        # nothing to a database that had been seeded once already.
         existing = (
             await db.execute(select(DepositWallet).where(DepositWallet.currency_id == wallet_data["currency_id"]))
         ).scalar_one_or_none()
 
         if existing is None:
             db.add(DepositWallet(**wallet_data))
-            print(f"✅ Added {wallet_data['currency_symbol']} deposit wallet")
+            print(f"added    {wallet_data['currency_symbol']} deposit wallet")
+            continue
+
+        if not overwrite:
+            same = existing.wallet_address == wallet_data["wallet_address"]
+            note = "" if same else "  (database differs from this file)"
+            print(f"kept     {wallet_data['currency_symbol']} as configured in the database{note}")
             continue
 
         changed = existing.wallet_address != wallet_data["wallet_address"]
         for field, value in wallet_data.items():
             setattr(existing, field, value)
-        print(f"{'🔁 Updated' if changed else '⏭️  Unchanged'} {wallet_data['currency_symbol']} deposit wallet")
+        print(f"{'overwrote' if changed else 'unchanged'} {wallet_data['currency_symbol']} deposit wallet")
 
     await db.commit()
-    print(f"\n✅ Seeded {len(DEPOSIT_WALLETS)} deposit wallets")
-    print("\n⚠️  WARNING: These are PLACEHOLDER addresses!")
-    print("   Admin must update these with REAL wallet addresses via the admin panel.")
+    print(f"\n{len(DEPOSIT_WALLETS)} deposit wallets configured.")
 
 
-async def main() -> None:
+async def main(overwrite: bool = False) -> None:
     async with AsyncSessionLocal() as db:
-        await seed_deposit_wallets(db)
+        await seed_deposit_wallets(db, overwrite=overwrite)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    import sys
+
+    asyncio.run(main(overwrite="--overwrite" in sys.argv))

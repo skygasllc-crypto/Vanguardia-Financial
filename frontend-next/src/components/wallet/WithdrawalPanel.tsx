@@ -6,6 +6,7 @@ import { Badge } from '@/components/common/Badge'
 import { Button } from '@/components/common/Button'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Modal } from '@/components/common/Modal'
+import { useAccountsStore } from '@/store/accountsStore'
 import { useWithdrawalsStore } from '@/store/withdrawalsStore'
 import { toast } from '@/store/toastStore'
 import type { TradingAccount } from '@/types/account'
@@ -39,6 +40,7 @@ export function WithdrawalPanel({ account }: { account: TradingAccount }) {
   const requestWithdrawal = useWithdrawalsStore((s) => s.requestWithdrawal)
   const cancelWithdrawal = useWithdrawalsStore((s) => s.cancelWithdrawal)
   const fetchQuote = useWithdrawalsStore((s) => s.fetchQuote)
+  const fetchAccounts = useAccountsStore((s) => s.fetchAccounts)
 
   const [isOpen, setIsOpen] = useState(false)
   const [method, setMethod] = useState<string>('USDT')
@@ -84,7 +86,11 @@ export function WithdrawalPanel({ account }: { account: TradingAccount }) {
       setAmount('')
       setDestination('')
       setMemo('')
-      load()
+      // Refresh the accounts too, not just the list: raising a request moves
+      // money into the hold, so Balance, On hold and Withdrawable on this same
+      // page are stale the moment it succeeds — and a user acting on the old
+      // figure would submit a second request against money already claimed.
+      await Promise.all([load(), fetchAccounts()])
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not submit the withdrawal.')
     } finally {
@@ -96,7 +102,7 @@ export function WithdrawalPanel({ account }: { account: TradingAccount }) {
     try {
       await cancelWithdrawal(id)
       toast.success('Withdrawal cancelled and funds released.')
-      load()
+      await Promise.all([load(), fetchAccounts()])
     } catch {
       toast.error('Could not cancel that withdrawal.')
     }

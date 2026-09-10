@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -91,8 +91,20 @@ def _limit_condition_met(order_type: OrderType, side: OrderSide, limit_price: De
 
 
 async def place_order(db: AsyncSession, user: User, payload: OrderCreate) -> tuple[Order, Trade | None, Position | None]:
+    from app.services.account_service import resolve_account as _resolve_account
+
     asset, market_price = await get_asset_and_price(db, payload.symbol)
     current_price = market_price.current_price
+
+    # Resolve the account before the order row is written, not after it is
+    # filled. The row names an account, and it used to take `payload.account_id`
+    # unchecked: an id belonging to somebody else satisfies the foreign key, so
+    # a limit order that did not fill immediately was committed pointing at
+    # another user's account, and an id that did not exist at all surfaced as a
+    # foreign-key 500 rather than a 404.
+    target = await _resolve_account(
+        db, user.id, account_id=payload.account_id, account_type=payload.account_type
+    )
 
     order = Order(
         user_id=user.id,
@@ -101,7 +113,7 @@ async def place_order(db: AsyncSession, user: User, payload: OrderCreate) -> tup
         order_type=payload.order_type,
         quantity=payload.quantity,
         account_type=payload.account_type,
-        account_id=payload.account_id,
+        account_id=target.id,
         price=payload.price,
         stop_price=payload.stop_price,
         take_profit_price=payload.take_profit_price,
@@ -135,6 +147,26 @@ async def _fill_order(db: AsyncSession, user: User, asset: Asset, order: Order, 
     account = await resolve_account(
         db, user.id, account_id=order.account_id, account_type=order.account_type
     )
+
+    # Everything below is a read-check-write on the same account: free margin
+    # is computed, the order is judged against it, then balances are written.
+    # Run concurrently that check is worthless — five simultaneous orders each
+    # saw the full balance and all five opened, reserving five times the margin
+    # the account could cover.
+    #
+    # Serialised with an advisory lock rather than SELECT ... FOR UPDATE. A row
+    # lock here deadlocks against the background market engine, which updates
+    # these same rows for stop-outs and equity snapshots; the engine never
+    # takes this advisory lock, so orders queue behind each other without ever
+    # forming a cycle with it. The lock is transaction-scoped and released on
+    # commit or rollback.
+    await db.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+        {"key": f"account-order:{account.id}"},
+    )
+    # Re-read under the lock: the values loaded above may predate a concurrent
+    # order that has since committed.
+    await db.refresh(account)
 
     if order.side == OrderSide.BUY:
         trade, position = await _execute_buy(db, user, asset, order, account, fill_price)

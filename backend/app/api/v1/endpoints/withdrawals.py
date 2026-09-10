@@ -57,7 +57,10 @@ async def quote(
     if account is None or account.user_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"error": {"code": "ACCOUNT_NOT_FOUND", "message": "Account not found."}})
 
-    fee = fee_for(method)
+    try:
+        fee = fee_for(method)
+    except WithdrawalError as exc:
+        raise _bad(exc) from exc
     requested = Decimal(str(amount)).quantize(Decimal("0.01"))
     net = requested - fee
     return WithdrawalQuote(
@@ -108,7 +111,7 @@ async def cancel(withdrawal_id: uuid.UUID, user: User = Depends(get_current_user
 
 @router.get("/admin/queue", response_model=list[AdminWithdrawalRow])
 async def admin_queue(
-    status_filter: str | None = Query(default=None),
+    status_filter: WithdrawalStatus | None = None,
     _admin: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -117,7 +120,7 @@ async def admin_queue(
         Account, Account.id == Withdrawal.account_id
     )
     if status_filter:
-        query = query.where(Withdrawal.status == WithdrawalStatus(status_filter))
+        query = query.where(Withdrawal.status == status_filter)
     rows = (await db.execute(query.order_by(Withdrawal.created_at.desc()))).all()
     return [
         AdminWithdrawalRow(

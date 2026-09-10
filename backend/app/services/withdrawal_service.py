@@ -47,7 +47,20 @@ class WithdrawalError(Exception):
 
 
 def fee_for(method: str) -> Decimal:
-    return METHOD_FEES.get(method, METHOD_FEES["bank"])
+    """Fee for `method`, rejecting anything not offered.
+
+    An unrecognised method used to fall back to the bank-transfer fee, so a
+    request naming a rail the platform cannot pay out on was accepted, held the
+    user's funds and reached the admin queue quoted at a fee for a different
+    route entirely.
+    """
+    try:
+        return METHOD_FEES[method]
+    except KeyError:
+        raise WithdrawalError(
+            f"{method} is not a supported withdrawal method. "
+            f"Choose one of: {', '.join(METHOD_FEES)}."
+        ) from None
 
 
 async def request_withdrawal(
@@ -62,7 +75,15 @@ async def request_withdrawal(
     user_note: str | None = None,
 ) -> Withdrawal:
     """Raise a request and hold the funds behind it."""
-    account = await db.get(Account, account_id)
+    # Locked for the length of the transaction, because everything below is a
+    # read-check-write on the balance: without the lock two requests submitted
+    # together both read the same balance, both decide it is sufficient, and
+    # both raise a hold. Their writes then overwrite rather than accumulate, so
+    # the account shows one hold while several withdrawals sit approvable
+    # against it — a double-spend of the difference.
+    account = (await db.execute(
+        select(Account).where(Account.id == account_id).with_for_update()
+    )).scalar_one_or_none()
     if account is None or account.user_id != user.id:
         raise WithdrawalError("Account not found.")
 
@@ -150,7 +171,9 @@ async def reject_withdrawal(
         # Already approved, so the money was debited. Put it back through the
         # ledger rather than silently adjusting the balance, or the account
         # would show a withdrawal with no matching return.
-        account = await db.get(Account, withdrawal.account_id)
+        account = (await db.execute(
+            select(Account).where(Account.id == withdrawal.account_id).with_for_update()
+        )).scalar_one_or_none()
         if account is not None:
             await apply_ledger_transaction(
                 db, account, TransactionType.ADMIN_CREDIT, withdrawal.amount,
@@ -185,7 +208,9 @@ async def approve_withdrawal(
     if withdrawal.status != WithdrawalStatus.PENDING:
         raise WithdrawalError(f"A {withdrawal.status.value} withdrawal cannot be approved.")
 
-    account = await db.get(Account, withdrawal.account_id)
+    account = (await db.execute(
+        select(Account).where(Account.id == withdrawal.account_id).with_for_update()
+    )).scalar_one_or_none()
     if account is None:
         raise WithdrawalError("Account not found.")
 
@@ -238,7 +263,9 @@ async def complete_withdrawal(
 
 async def _release_hold(db: AsyncSession, withdrawal: Withdrawal) -> None:
     """Return held funds to spendable balance."""
-    account = await db.get(Account, withdrawal.account_id)
+    account = (await db.execute(
+        select(Account).where(Account.id == withdrawal.account_id).with_for_update()
+    )).scalar_one_or_none()
     if account is None:
         return
     account.locked_balance -= withdrawal.amount

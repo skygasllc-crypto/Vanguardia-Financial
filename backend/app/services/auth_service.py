@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -21,14 +21,19 @@ class AuthError(Exception):
 
 
 async def register_user(db: AsyncSession, payload: RegisterRequest) -> User:
+    # Addresses are matched and stored case-insensitively: nobody expects
+    # Jane@example.com and jane@example.com to be two different logins, and
+    # treating them as one here is what lets `authenticate_user` find the
+    # account whatever case the address is typed in.
+    email = payload.email.strip().lower()
     existing = await db.execute(
-        select(User).where((User.email == payload.email) | (User.username == payload.username))
+        select(User).where((func.lower(User.email) == email) | (User.username == payload.username))
     )
     if existing.scalar_one_or_none() is not None:
         raise AuthError("An account with this email or username already exists.")
 
     user = User(
-        email=payload.email,
+        email=email,
         username=payload.username,
         password_hash=hash_password(payload.password),
         full_name=payload.full_name,
@@ -61,7 +66,11 @@ async def register_user(db: AsyncSession, payload: RegisterRequest) -> User:
 async def authenticate_user(
     db: AsyncSession, email: str, password: str, ip_address: str | None, user_agent: str | None
 ) -> User:
-    result = await db.execute(select(User).where(User.email == email))
+    # Case-insensitive: the address is stored lowercased, but a user typing
+    # the capitalisation they originally signed up with (or that their phone
+    # auto-capitalised) must still get in. An exact match here locked people
+    # out of accounts with no password reset to recover through.
+    result = await db.execute(select(User).where(func.lower(User.email) == email.strip().lower()))
     user = result.scalar_one_or_none()
 
     success = user is not None and verify_password(password, user.password_hash)
