@@ -234,6 +234,10 @@ async def account_metrics(db: AsyncSession, account: Account) -> dict:
 
     return {
         "balance": balance.quantize(Decimal("0.01")),
+        # Funds locked behind a pending or approved withdrawal. Surfaced
+        # because otherwise the balance simply drops when a request is raised
+        # and nothing on screen says where the money went.
+        "held": Decimal(account.locked_balance).quantize(Decimal("0.01")),
         "bonus": Decimal(account.bonus_balance).quantize(Decimal("0.01")),
         "withdrawable": account.withdrawable_balance.quantize(Decimal("0.01")),
         "equity": equity,

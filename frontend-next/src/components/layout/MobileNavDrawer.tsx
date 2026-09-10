@@ -40,7 +40,7 @@ export function MobileNavDrawer({ isOpen, onClose }: { isOpen: boolean; onClose:
       <div className="absolute inset-0 bg-navy-950/50" onClick={onClose} aria-hidden="true" />
       <div className="relative flex h-full w-72 flex-col bg-white shadow-xl">
         <div className="flex h-16 items-center justify-between px-5">
-          <Logo wordmark={false} />
+          <Logo size="sm" />
           <button onClick={onClose} aria-label="Close menu" className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100">
             ×
           </button>

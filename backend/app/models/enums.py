@@ -75,6 +75,22 @@ class TransactionType(str, enum.Enum):
     WITHDRAWAL = "WITHDRAWAL"
 
 
+class WithdrawalStatus(str, enum.Enum):
+    """Lifecycle of a withdrawal request.
+
+    Funds are held from the moment a request is raised, not when an admin gets
+    to it — otherwise a user could request a withdrawal, trade the same money
+    away while it sits in the queue, and leave the account negative when it is
+    approved.
+    """
+
+    PENDING = "pending"        # raised, funds held, awaiting review
+    APPROVED = "approved"      # admin approved, payment being sent
+    COMPLETED = "completed"    # funds sent; the hold becomes a debit
+    REJECTED = "rejected"      # admin declined; the hold is released
+    CANCELLED = "cancelled"    # withdrawn by the user; the hold is released
+
+
 class AdjustmentType(str, enum.Enum):
     CREDIT = "credit"
     DEBIT = "debit"

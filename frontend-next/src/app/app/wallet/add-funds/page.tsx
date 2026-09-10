@@ -23,6 +23,7 @@ function AddFundsInner() {
   const accounts = useAccountsStore((s) => s.accounts)
   const fetchAccounts = useAccountsStore((s) => s.fetchAccounts)
   const targetAccount = accounts.find((a) => a.id === targetAccountId)
+  const isBankTransfer = selectedWallet?.network === 'Bank Transfer'
   const [amount, setAmount] = useState<string>('')
   const [copied, setCopied] = useState(false)
   const [deposits, setDeposits] = useState<Deposit[]>([])
@@ -44,7 +45,7 @@ function AddFundsInner() {
     try {
       const data = await api.get<DepositWallet[]>('/deposits/wallets')
       setWallets(data)
-    } catch (error) {
+    } catch {
       toast.error('Failed to load deposit wallets')
     }
   }
@@ -85,7 +86,7 @@ function AddFundsInner() {
     setIsLoading(true)
     try {
       const updated = await api.post<Deposit>(`/deposits/${depositId}/mark-paid`, {})
-      toast.success('Payment marked successfully. Awaiting admin confirmation.')
+      toast.success('Payment marked. Waiting confirmation.')
       await fetchDeposits()
       if (currentDeposit?.id === depositId) {
         setCurrentDeposit(updated)
@@ -117,7 +118,7 @@ function AddFundsInner() {
       case 'pending':
         return <Badge tone="warning">Pending</Badge>
       case 'user_paid':
-        return <Badge tone="neutral">Awaiting Confirmation</Badge>
+        return <Badge tone="neutral">Waiting Confirmation</Badge>
       case 'confirming':
         return <Badge tone="neutral">Confirming</Badge>
       case 'confirmed':
@@ -150,7 +151,7 @@ return (
       {/* Header */}
       <div>
         <h1 className="font-display text-2xl font-bold text-navy-900 sm:text-3xl">Add Funds</h1>
-        <p className="mt-2 text-slate-600">Deposit cryptocurrency to your REAL trading account</p>
+        <p className="mt-2 text-slate-600">Refill your account</p>
       </div>
 
       {/* Current Balance */}
@@ -238,12 +239,32 @@ return (
                 <label className="block text-sm font-medium text-navy-900">
                   Deposit Address
                 </label>
-                {/* QR sits beside the address on desktop and above it on
-                    narrow screens, where scanning from a phone is most likely
-                    to be how it gets used. Bank-transfer details are a text
-                    block rather than a scannable target, so the code is
-                    suppressed for them. */}
-                <div className="mt-2 flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+                {/* Wire transfers are arranged with support rather than
+                    self-served: bank details vary by corridor and amount, and
+                    a wrong reference on a wire is far harder to recover than a
+                    mistyped crypto address. */}
+                {isBankTransfer ? (
+                  <div className="mt-2 rounded-xl border border-accent-200 bg-accent-50 p-5 text-center">
+                    <p className="text-sm font-semibold text-navy-900">Contact customer support</p>
+                    <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-slate-600">
+                      Wire and bank transfers are set up individually. Get in touch and our team will send you the
+                      correct beneficiary details and payment reference for your region and amount.
+                    </p>
+                    <a
+                      href="mailto:support@vanguardiafinancial.com?subject=Wire%20transfer%20deposit"
+                      className="mt-3 inline-flex items-center justify-center rounded-lg bg-navy-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-navy-800"
+                    >
+                      support@vanguardiafinancial.com
+                    </a>
+                    <p className="mt-3 text-[11px] text-slate-500">
+                      Do not send funds before receiving confirmed details.
+                    </p>
+                  </div>
+                ) : (
+                  // QR sits beside the address on desktop and above it on
+                  // narrow screens, where scanning from a phone is most likely
+                  // to be how it gets used.
+                  <div className="mt-2 flex flex-col items-center gap-4 sm:flex-row sm:items-start">
                   <DepositQrCode
                     address={selectedWallet.wallet_address}
                     currency={selectedWallet.currency_symbol}
@@ -277,6 +298,7 @@ return (
                 )}
                   </div>
                 </div>
+                )}
               </div>
 
               {/* Fee Info */}
@@ -327,8 +349,8 @@ return (
                     <li>Ensure you are using the <strong>{selectedWallet.network}</strong> network</li>
                     <li>Sending via wrong network will result in permanent loss of funds</li>
                     {selectedWallet.minimum_deposit && <li>Minimum deposit: <strong>{selectedWallet.minimum_deposit}</strong></li>}
-                    <li>After sending, click "I Paid" button below to notify admin</li>
-                    <li>All deposits require admin confirmation before being credited</li>
+                    <li>After sending, click &ldquo;I Paid&rdquo; button below and wait for confirmation.</li>
+                    <li>All deposits require confirmation before being credited</li>
                   </ul>
                 </div>
               </div>
@@ -386,7 +408,7 @@ return (
                           I Paid
                         </Button>
                       ) : deposit.status === 'user_paid' ? (
-                        <span className="text-xs font-medium text-blue-600">Awaiting Admin Confirmation</span>
+                        <span className="text-xs font-medium text-blue-600">Waiting Confirmation</span>
                       ) : null}
                     </td>
                   </tr>
@@ -456,7 +478,7 @@ return (
             </svg>
             <div>
               <p className="font-medium text-navy-900">How long do deposits take?</p>
-              <p className="mt-1">After you click "I Paid", admin will review and confirm your deposit. This typically takes 10-30 minutes during business hours.</p>
+              <p className="mt-1">After you click &ldquo;I Paid&rdquo; your deposit shows as waiting confirmation while we verify it. This typically takes 10&ndash;30 minutes during business hours.</p>
             </div>
           </div>
           <div className="flex gap-3">

@@ -39,3 +39,4 @@ __all__ = [
     "UserSession",
     "WatchlistItem",
 ]
+from app.models.withdrawal import Withdrawal  # noqa: F401

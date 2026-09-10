@@ -1,3 +1,4 @@
+import uuid
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,8 +13,9 @@ router = APIRouter()
 
 @router.get("", response_model=PortfolioSummary)
 async def get_portfolio(
+    account_id: uuid.UUID | None = None,
     account_type: str = "demo",
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    return await build_portfolio_summary(db, user.id, account_type)
+    return await build_portfolio_summary(db, user.id, account_type, account_id)

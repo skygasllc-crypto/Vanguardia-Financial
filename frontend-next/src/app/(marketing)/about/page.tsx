@@ -267,8 +267,8 @@ export default function AboutPage() {
               <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Contact</h3>
               <dl className="mt-6 grid grid-cols-1 gap-6 text-sm sm:grid-cols-2">
                 <Row label="Headquarters" value={COMPANY.headquarters} />
-                <Row label="Phone" value={`${COMPANY.phone1}`} />
-                <Row label="Alternate Phone" value={`${COMPANY.phone2}`} />
+                <Row label=" Connect to Advisor" value={`${COMPANY.phone1}`} />
+                <Row label="Contact Support" value={`${COMPANY.phone2}`} />
                 <Row label="Email" value={COMPANY.email} />
                 <Row label="Website" value={COMPANY.website} />
               </dl>

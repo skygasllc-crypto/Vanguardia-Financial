@@ -67,5 +67,10 @@ class Account(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         Bonus funds can be traded but not withdrawn, so they are deducted.
         Margin backing open positions is likewise unavailable until closed.
         """
+        # Held funds need no subtraction of their own: taking a hold debits
+        # `available_balance` and credits `locked_balance` in the same unit of
+        # work, so money behind a pending withdrawal is already missing from
+        # the figure below. A future path that locks *without* debiting would
+        # have to subtract `locked_balance` here as well.
         free = self.available_balance - self.bonus_balance - self.margin_used
         return free if free > 0 else Decimal(0)

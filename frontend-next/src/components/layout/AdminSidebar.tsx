@@ -11,6 +11,7 @@ const navItems = [
   { href: '/admin/dashboard', label: 'Overview', icon: DashboardIcon },
   { href: '/admin/users', label: 'Users', icon: ProfileIcon },
   { href: '/admin/deposits', label: 'Deposits', icon: WalletIcon },
+  { href: '/admin/withdrawals', label: 'Withdrawals', icon: WalletIcon },
   { href: '/admin/audit-logs', label: 'Audit Logs', icon: SecurityIcon },
 ]
 
@@ -20,7 +21,7 @@ export function AdminSidebar() {
   return (
     <aside className="hidden w-64 shrink-0 flex-col border-r border-navy-700 bg-navy-950 lg:flex">
       <div className="flex h-16 items-center gap-2 px-6">
-        <Logo dark />
+        <Logo dark size="sm" />
       </div>
       <div className="px-6 pb-2">
         <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold text-white">

@@ -5,11 +5,12 @@ import Link from 'next/link'
 
 import { AllocationDonut, allocationColor } from '@/components/charts/AllocationDonut'
 import { PortfolioAreaChart } from '@/components/charts/PortfolioAreaChart'
-import { AccountTypeSwitcher } from '@/components/common/AccountTypeSwitcher'
+import { AccountSwitcher } from '@/components/accounts/AccountSwitcher'
 import { Badge } from '@/components/common/Badge'
 import { Card, CardHeader } from '@/components/common/Card'
 import { EmptyState } from '@/components/common/EmptyState'
 import { PnLText } from '@/components/common/PnLText'
+import { useAccountsStore } from '@/store/accountsStore'
 import { Skeleton } from '@/components/common/Spinner'
 import { StatCard } from '@/components/common/StatCard'
 import { useAccountStore } from '@/store/accountStore'
@@ -38,6 +39,8 @@ export default function DashboardPage() {
   const user = useAuthStore((s) => s.user)
   const summary = usePortfolioStore((s) => s.summary)
   const fetchPortfolio = usePortfolioStore((s) => s.fetchPortfolio)
+  const activeAccountId = useAccountsStore((s) => s.activeAccountId)
+  const fetchAccounts = useAccountsStore((s) => s.fetchAccounts)
   const assets = useMarketStore((s) => s.assets)
   const watchlist = useWatchlistStore((s) => s.items)
   const transactions = useAccountStore((s) => s.transactions)
@@ -49,9 +52,15 @@ export default function DashboardPage() {
     fetchTransactions().catch(() => undefined)
   }, [fetchTransactions])
 
+  // Refetch whenever the selected account changes, so the figures follow the
+  // account switcher rather than staying on whichever one loaded first.
   useEffect(() => {
-    fetchPortfolio(accountType).catch(() => undefined)
-  }, [accountType, fetchPortfolio])
+    fetchAccounts().catch(() => undefined)
+  }, [fetchAccounts])
+
+  useEffect(() => {
+    fetchPortfolio(accountType, activeAccountId ?? undefined).catch(() => undefined)
+  }, [accountType, activeAccountId, fetchPortfolio])
 
   const history = useMemo(() => buildSyntheticHistory(Number(summary?.total_portfolio_value ?? 100000)), [summary?.total_portfolio_value, range])
 
@@ -81,7 +90,7 @@ export default function DashboardPage() {
           <p className="text-sm text-slate-500">Here&apos;s how your portfolio is performing.</p>
         </div>
         <div className="flex items-center gap-3">
-          <AccountTypeSwitcher />
+          <AccountSwitcher />
           {summary.data_source === 'admin_managed' && <Badge tone="gold">Admin-managed</Badge>}
         </div>
       </div>

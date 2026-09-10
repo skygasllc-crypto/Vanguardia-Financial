@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { AccountHistory } from '@/components/accounts/AccountHistory'
 import { AccountTile } from '@/components/accounts/AccountTile'
 import { EquityChart } from '@/components/accounts/EquityChart'
+import { WithdrawalPanel } from '@/components/wallet/WithdrawalPanel'
 import { Button } from '@/components/common/Button'
 import { Input } from '@/components/common/Input'
 import { Modal } from '@/components/common/Modal'
@@ -185,9 +186,14 @@ export default function AccountsPage() {
             </div>
           </div>
 
-          <div className="mt-5 grid grid-cols-2 gap-4 rounded-xl bg-slate-50 p-4 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="mt-5 grid grid-cols-2 gap-4 rounded-xl bg-slate-50 p-4 sm:grid-cols-3 lg:grid-cols-7">
             <Stat label="Balance" value={formatCurrency(active.balance, active.currency)} />
             <Stat label="Credits" value={formatCurrency(active.bonus, active.currency)} />
+            <Stat
+              label="On hold"
+              value={formatCurrency(active.held, active.currency)}
+              hint={Number(active.held) > 0 ? 'pending withdrawal' : undefined}
+            />
             <Stat label="Withdrawable" value={formatCurrency(active.withdrawable, active.currency)} />
             <Stat label="Margin used" value={formatCurrency(active.margin_used, active.currency)} />
             <Stat label="Free margin" value={formatCurrency(active.free_margin, active.currency)} />
@@ -216,6 +222,10 @@ export default function AccountsPage() {
           </div>
           <div className="mt-3">
             <EquityChart points={curve} />
+          </div>
+
+          <div className="mt-6 border-t border-slate-100 pt-4">
+            <WithdrawalPanel account={active} />
           </div>
 
           <div className="mt-6 border-t border-slate-100 pt-4">
@@ -269,11 +279,12 @@ export default function AccountsPage() {
   )
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="min-w-0">
       <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400">{label}</p>
       <p className="mt-0.5 truncate text-sm font-semibold tabular-nums text-navy-900">{value}</p>
+      {hint && <p className="truncate text-[10px] text-amber-600">{hint}</p>}
     </div>
   )
 }

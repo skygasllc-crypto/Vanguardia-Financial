@@ -11,6 +11,7 @@ import type {
 } from '@/types/admin'
 import type { Order, Position } from '@/types/trading'
 import type { TradingAccount } from '@/types/account'
+import type { AdminWithdrawal } from '@/types/withdrawal'
 import type { LedgerEntry } from '@/types/wallet'
 
 export const adminService = {
@@ -73,6 +74,18 @@ export const adminService = {
 
   adjustAccountBonus: (accountId: string, amount: number, reason: string) =>
     api.post<TradingAccount>(`/admin/accounts/${accountId}/bonus`, { amount, reason }),
+
+  listWithdrawals: (statusFilter?: string) =>
+    api.get<AdminWithdrawal[]>(`/withdrawals/admin/queue${statusFilter ? `?status_filter=${statusFilter}` : ''}`),
+
+  approveWithdrawal: (id: string, adminNote?: string) =>
+    api.post<AdminWithdrawal>(`/withdrawals/admin/${id}/approve`, { admin_note: adminNote }),
+
+  rejectWithdrawal: (id: string, reason: string) =>
+    api.post<AdminWithdrawal>(`/withdrawals/admin/${id}/reject`, { reason }),
+
+  completeWithdrawal: (id: string, transactionReference?: string) =>
+    api.post<AdminWithdrawal>(`/withdrawals/admin/${id}/complete`, { transaction_reference: transactionReference }),
 
   updateUserVerification: (userId: string, isVerified: boolean) =>
     api.patch<{ success: boolean; is_verified: boolean }>(`/admin/users/${userId}/verification`, { is_verified: isVerified }),

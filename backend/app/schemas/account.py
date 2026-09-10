@@ -19,6 +19,8 @@ class AccountOut(BaseModel):
     is_active: bool
 
     balance: Decimal
+    #: Locked behind a pending or approved withdrawal.
+    held: Decimal = Decimal(0)
     bonus: Decimal
     #: Balance less outstanding bonus and reserved margin.
     withdrawable: Decimal

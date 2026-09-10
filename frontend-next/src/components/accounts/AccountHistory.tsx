@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { PnLText } from '@/components/common/PnLText'
 import { Spinner } from '@/components/common/Spinner'
 import { useAccountsStore } from '@/store/accountsStore'
+import { useWithdrawalsStore } from '@/store/withdrawalsStore'
 import type { TradingAccount } from '@/types/account'
 import type { Order, Position } from '@/types/trading'
 import type { LedgerEntry } from '@/types/wallet'
@@ -22,6 +23,7 @@ export function AccountHistory({ account }: { account: TradingAccount }) {
   const fetchTransactions = useAccountsStore((s) => s.fetchTransactions)
   const fetchOrders = useAccountsStore((s) => s.fetchOrders)
   const fetchPositions = useAccountsStore((s) => s.fetchPositions)
+  const withdrawals = useWithdrawalsStore((s) => s.withdrawals)
 
   const [tab, setTab] = useState<(typeof TABS)[number]>('Transactions')
   // Tagged with the account it belongs to, so switching accounts invalidates
@@ -47,6 +49,11 @@ export function AccountHistory({ account }: { account: TradingAccount }) {
       cancelled = true
     }
   }, [account.id, fetchTransactions, fetchOrders, fetchPositions])
+
+  // Withdrawals that have left the balance but not yet the books.
+  // Only pending ones are unexplained now — an approved withdrawal has been
+  // debited and appears in the ledger below like any other transaction.
+  const inFlight = withdrawals.filter((w) => w.account_id === account.id && w.status === 'pending')
 
   const fresh = loaded?.accountId === account.id ? loaded : null
   const ledger = fresh?.ledger ?? null
@@ -82,6 +89,26 @@ export function AccountHistory({ account }: { account: TradingAccount }) {
       </div>
 
       <div className="mt-4">
+        {tab === 'Transactions' && inFlight.length > 0 && (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <p className="text-xs font-semibold text-amber-800">Funds on hold</p>
+            <p className="mt-0.5 text-[11px] text-amber-700">
+              These withdrawals are awaiting review. The amount has left your available balance and will appear as
+              a transaction once approved.
+            </p>
+            <ul className="mt-2 space-y-1">
+              {inFlight.map((w) => (
+                <li key={w.id} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="text-amber-900">
+                    {formatCurrency(w.amount, w.currency)} · {w.method}
+                  </span>
+                  <Badge tone={w.status === 'approved' ? 'accent' : 'warning'}>{w.status}</Badge>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {tab === 'Transactions' && (
           <Table
             rows={ledger}

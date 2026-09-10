@@ -8,7 +8,7 @@ Otherwise every figure is derived live from the ledger and open positions.
 """
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.admin_position import AdminPosition
@@ -22,29 +22,49 @@ from app.schemas.trading import PositionOut
 from app.services.trading_service import get_or_create_account
 
 
-async def build_portfolio_summary(db: AsyncSession, user_id, account_type: str = "demo") -> PortfolioSummary:
+async def build_portfolio_summary(db: AsyncSession, user_id, account_type: str = "demo", account_id=None) -> PortfolioSummary:
     settings_result = await db.execute(select(UserFinancialSettings).where(UserFinancialSettings.user_id == user_id))
     override = settings_result.scalar_one_or_none()
 
     if override is not None and override.is_active:
         return await _build_admin_managed_summary(db, user_id, override, account_type)
-    return await _build_engine_summary(db, user_id, account_type)
+    return await _build_engine_summary(db, user_id, account_type, account_id)
 
 
-async def _build_engine_summary(db: AsyncSession, user_id, account_type: str = "demo") -> PortfolioSummary:
-    account = await get_or_create_account(db, user_id, account_type)
+async def _build_engine_summary(
+    db: AsyncSession, user_id, account_type: str = "demo", account_id=None
+) -> PortfolioSummary:
+    """Portfolio figures for one account.
 
-    positions_result = await db.execute(
+    Scoped to a single account rather than to an account *type*: a user may
+    hold several of each, and the previous version took the balance from one
+    account while summing positions across all of them, then computed realised
+    P&L from every trade the user had ever made with no account filter at all.
+    The result was a dashboard that could not agree with the account page.
+
+    Realised P&L is read from closed positions, the same source
+    `account_service.account_metrics` uses, so the two screens cannot diverge.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from app.models.equity_snapshot import EquitySnapshot
+    from app.services.account_service import resolve_account
+
+    account = await resolve_account(db, user_id, account_id=account_id, account_type=account_type)
+
+    open_positions = (await db.execute(
         select(Position).where(
-            Position.user_id == user_id,
+            Position.account_id == account.id,
             Position.status == PositionStatus.OPEN,
-            Position.account_type == account_type
         )
-    )
-    open_positions = positions_result.scalars().all()
+    )).scalars().all()
 
-    realized_result = await db.execute(select(Trade.realized_profit_loss).where(Trade.user_id == user_id))
-    total_realized = sum((r[0] for r in realized_result.all() if r[0] is not None), Decimal(0))
+    total_realized = Decimal(str((await db.execute(
+        select(func.coalesce(func.sum(Position.realized_profit_loss), 0)).where(
+            Position.account_id == account.id,
+            Position.status == PositionStatus.CLOSED,
+        )
+    )).scalar() or 0))
 
     value_of_crypto = sum((p.current_market_value for p in open_positions), Decimal(0))
     total_unrealized = sum((p.unrealized_profit_loss for p in open_positions), Decimal(0))
@@ -52,6 +72,28 @@ async def _build_engine_summary(db: AsyncSession, user_id, account_type: str = "
     total_portfolio_value = account.available_balance + account.locked_balance + value_of_crypto
     total_pl = total_realized + total_unrealized
     total_pl_pct = (total_unrealized / total_invested * 100) if total_invested else Decimal(0)
+
+    # A genuine day's change, measured against the first equity snapshot of the
+    # last 24 hours. Previously this reported total unrealised P&L, which is
+    # not a daily figure at all — a position held for a month showed its whole
+    # lifetime gain as "today".
+    since = datetime.now(timezone.utc) - timedelta(hours=24)
+    opening_equity = (await db.execute(
+        select(EquitySnapshot.equity)
+        .where(EquitySnapshot.account_id == account.id, EquitySnapshot.taken_at >= since)
+        .order_by(EquitySnapshot.taken_at)
+        .limit(1)
+    )).scalar()
+
+    current_equity = account.available_balance + total_unrealized
+    if opening_equity is not None and Decimal(str(opening_equity)) > 0:
+        opening = Decimal(str(opening_equity))
+        daily_pl = (current_equity - opening).quantize(Decimal("0.01"))
+        daily_pl_pct = (daily_pl / opening * 100).quantize(Decimal("0.01"))
+    else:
+        # No snapshot yet — say nothing rather than invent a number.
+        daily_pl = Decimal(0)
+        daily_pl_pct = Decimal(0)
 
     allocation: list[AllocationSlice] = []
     if value_of_crypto > 0:
@@ -74,8 +116,8 @@ async def _build_engine_summary(db: AsyncSession, user_id, account_type: str = "
         total_realized_profit_loss=total_realized,
         total_profit_loss=total_pl,
         total_profit_loss_pct=total_pl_pct,
-        daily_profit_loss=total_unrealized,
-        daily_profit_loss_pct=total_pl_pct,
+        daily_profit_loss=daily_pl,
+        daily_profit_loss_pct=daily_pl_pct,
         currency=account.currency,
         allocation=allocation,
         positions=[PositionOut.model_validate(p) for p in open_positions],

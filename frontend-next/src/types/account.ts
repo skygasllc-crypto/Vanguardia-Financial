@@ -13,8 +13,10 @@ export interface TradingAccount {
   is_primary: boolean
   is_active: boolean
 
-  /** Settled cash, bonus included. */
+  /** Settled cash, credits included. */
   balance: string
+  /** Locked behind a pending or approved withdrawal. */
+  held: string
   bonus: string
   /** Balance less outstanding bonus and reserved margin. */
   withdrawable: string

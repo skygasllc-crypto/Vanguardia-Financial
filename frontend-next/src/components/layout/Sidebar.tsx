@@ -36,7 +36,7 @@ export function Sidebar() {
   return (
     <aside className="hidden w-64 shrink-0 flex-col border-r border-slate-200 bg-white lg:flex">
       <div className="flex h-16 items-center px-6">
-        <Logo wordmark={false} />
+        <Logo size="sm" />
       </div>
       <nav className="flex-1 space-y-1 px-3 py-4" aria-label="Main">
         {navItems.map((item) => {
