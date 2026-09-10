@@ -12,6 +12,7 @@ from app.models.login_history import LoginHistory
 from app.models.user import User
 from app.models.user_session import UserSession
 from app.schemas.auth import RegisterRequest
+from app.services.account_service import create_account
 from app.services.audit_service import record_audit
 
 
@@ -36,25 +37,16 @@ async def register_user(db: AsyncSession, payload: RegisterRequest) -> User:
     db.add(user)
     await db.flush()
 
-    # Create DEMO account with starting balance
-    demo_account = Account(
-        user_id=user.id,
-        currency=settings.DEFAULT_ACCOUNT_CURRENCY,
-        account_type=AccountType.DEMO,
-        available_balance=settings.STARTING_PAPER_BALANCE,
-        locked_balance=0,
-    )
-    db.add(demo_account)
-
-    # Create REAL account with zero balance
-    real_account = Account(
-        user_id=user.id,
-        currency=settings.DEFAULT_ACCOUNT_CURRENCY,
-        account_type=AccountType.REAL,
-        available_balance=0,
-        locked_balance=0,
-    )
-    db.add(real_account)
+    # Opened through `create_account` rather than built here, so a new user's
+    # accounts are identical to any opened later: it allocates the unique
+    # `account_number` (NOT NULL since multi-account) and marks the first of
+    # each type primary. Building the rows inline skipped both, and every
+    # registration failed on the not-null constraint.
+    #
+    # Balances still come out as before — create_account funds a USD demo
+    # account with the practice balance and opens a real account at zero.
+    await create_account(db, user.id, AccountType.DEMO)
+    await create_account(db, user.id, AccountType.REAL)
 
     await record_audit(
         db, actor_id=user.id, actor_type=AuditActorType.USER, action="USER_REGISTERED",
