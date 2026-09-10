@@ -1,0 +1,42 @@
+# --- Secrets -----------------------------------------------------------------
+# backend/.env holds SECRET_KEY and database credentials; .env.local holds the
+# API base URL. The *.example files are committed as templates instead.
+.env
+.env.*
+!*.env.example
+!.env.example
+!.env.local.example
+!**/.env.example
+!**/.env.local.example
+
+*.pem
+*.key
+!**/public/**/*.key
+
+# --- Dependencies ------------------------------------------------------------
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.Python
+
+# --- Build output ------------------------------------------------------------
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+
+# --- Tooling / OS ------------------------------------------------------------
+.DS_Store
+Thumbs.db
+*.log
+.eslintcache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+coverage/
+.idea/
+.vscode/
+!.vscode/extensions.json

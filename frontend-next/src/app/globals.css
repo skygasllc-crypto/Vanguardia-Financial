@@ -1,0 +1,96 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: var(--font-roboto), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-roboto-condensed), var(--font-roboto), ui-sans-serif, system-ui, sans-serif;
+
+  /* Corporate color system — deep navy blues paired with
+     bold red accents. Professional, trustworthy, and institutional. */
+  --color-navy-950: #001529;
+  --color-navy-900: #002647;
+  --color-navy-800: #003066;
+  --color-navy-700: #003478;
+  --color-navy-600: #004494;
+  --color-navy-500: #0056b3;
+
+  /* Corporate red accent */
+  --color-accent-50: #fef2f2;
+  --color-accent-100: #fee2e2;
+  --color-accent-400: #f87171;
+  --color-accent-500: #ef4444;
+  --color-accent-600: #dc2626;
+  --color-accent-700: #C8102E;
+
+  /* Financial signal colors */
+  --color-gain-50: #ecfdf3;
+  --color-gain-500: #17a367;
+  --color-gain-600: #0f8a56;
+  --color-loss-50: #fef3f2;
+  --color-loss-500: #e0483f;
+  --color-loss-600: #c53a32;
+
+  /* Restrained premium accent, used sparingly */
+  --color-gold-500: #b8933f;
+
+  --shadow-card: 0 1px 2px rgba(10, 15, 26, 0.04), 0 8px 24px -12px rgba(10, 15, 26, 0.12);
+  --shadow-card-lg: 0 4px 12px rgba(10, 15, 26, 0.06), 0 24px 48px -20px rgba(10, 15, 26, 0.18);
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    @apply bg-slate-50 text-navy-900 antialiased;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.015em;
+  }
+
+  ::selection {
+    @apply bg-accent-100 text-accent-700;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent-500);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@keyframes ticker {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-\[ticker_38s_linear_infinite\] {
+    animation: none;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: var(--color-navy-600);
+    border-radius: 999px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}

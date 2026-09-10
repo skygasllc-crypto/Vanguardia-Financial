@@ -1,0 +1,102 @@
+# Render Blueprint — deploys the whole platform from one file.
+#
+# Four services: the FastAPI backend, a Postgres database, Redis, and the
+# frontend as a static site.
+#
+# The backend cannot run on the free plan. It starts a background engine at
+# boot (see `lifespan` in app/main.py) that polls prices, enforces margin
+# stop-outs and writes equity snapshots on a timer. Free Render services sleep
+# after ~15 minutes idle, which stops that loop — prices freeze and a losing
+# account is never stopped out until somebody happens to load the site.
+
+services:
+  # --- API -------------------------------------------------------------------
+  - type: web
+    name: vanguardia-backend
+    runtime: python
+    region: oregon
+    # Deliberately not `free`: this process must stay awake. See note above.
+    plan: starter
+    buildCommand: "pip install -r backend/requirements.txt"
+    # Migrations run on deploy so the schema is never behind the code.
+    preDeployCommand: "cd backend && alembic upgrade head"
+    startCommand: "cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /api/health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      # Off in production: with DEBUG on, unhandled errors return stack traces
+      # and internal paths to whoever triggered them.
+      - key: DEBUG
+        value: "false"
+      - key: PYTHON_VERSION
+        value: "3.12"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: vanguardia-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: vanguardia-redis
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      # The browser origin the API accepts. Must match the site exactly —
+      # scheme and host — or every request from the frontend is blocked.
+      - key: CORS_ORIGINS
+        value: "https://vanguardiafinancial.com,https://www.vanguardiafinancial.com"
+      - key: MARKET_DATA_SOURCE
+        value: live
+      # Optional. Blank leaves Twelve Data inert and prices come from
+      # CoinGecko plus Yahoo, which is how it runs today.
+      - key: TWELVEDATA_API_KEY
+        sync: false
+
+  # --- Frontend --------------------------------------------------------------
+  # A static site, not a web service: next.config.ts sets `output: "export"`,
+  # which emits plain files into `out/`. There is no Node server to start, so
+  # `npm start` would fail here.
+  - type: web
+    name: vanguardia-frontend
+    runtime: static
+    buildCommand: "cd frontend-next && npm ci && npm run build"
+    staticPublishPath: frontend-next/out
+    envVars:
+      - key: NEXT_PUBLIC_API_BASE_URL
+        value: https://api.vanguardiafinancial.com
+      - key: NEXT_PUBLIC_SITE_URL
+        value: https://vanguardiafinancial.com
+    routes:
+      # Static export writes real .html files; this lets client-side routes
+      # resolve rather than 404 on refresh.
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+
+  # --- Redis -----------------------------------------------------------------
+  - type: redis
+    name: vanguardia-redis
+    region: oregon
+    plan: free
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []
+
+databases:
+  - name: vanguardia-db
+    databaseName: vanguardia
+    user: vanguardia
+    region: oregon
+    # Free Postgres on Render expires 90 days after creation and is deleted.
+    # Anything holding real balances belongs on a paid plan.
+    plan: basic-256mb
