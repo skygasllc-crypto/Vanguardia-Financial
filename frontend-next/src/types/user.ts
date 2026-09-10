@@ -8,6 +8,7 @@ export interface User {
   email: string
   username: string
   full_name: string
+  phone: string | null
   status: UserStatus
   role: UserRole
   risk_status: RiskStatus

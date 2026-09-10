@@ -6,7 +6,7 @@ import { Badge } from '@/components/common/Badge'
 import { Button } from '@/components/common/Button'
 import { Card, CardHeader } from '@/components/common/Card'
 import { Input } from '@/components/common/Input'
-import { api } from '@/lib/apiClient'
+import { ApiError, api } from '@/lib/apiClient'
 import { useAuthStore } from '@/store/authStore'
 import { useUiStore } from '@/store/uiStore'
 import { toast } from '@/store/toastStore'
@@ -20,6 +20,8 @@ export default function ProfilePage() {
   const toggleTheme = useUiStore((s) => s.toggleTheme)
 
   const [fullName, setFullName] = useState(user?.full_name ?? '')
+  const [email, setEmail] = useState(user?.email ?? '')
+  const [phone, setPhone] = useState(user?.phone ?? '')
   const [isSaving, setIsSaving] = useState(false)
   const [notifyTrade, setNotifyTrade] = useState(true)
   const [notifySecurity, setNotifySecurity] = useState(true)
@@ -29,15 +31,22 @@ export default function ProfilePage() {
   async function handleSave(e: FormEvent) {
     e.preventDefault()
     setIsSaving(true)
+    const emailChanged = email.trim().toLowerCase() !== (user?.email ?? '').toLowerCase()
     try {
       await api.patch<User>('/users/me', {
         full_name: fullName,
+        email: email.trim(),
+        phone: phone.trim(),
         notification_preferences: { trade: notifyTrade, security: notifySecurity },
       })
       await fetchCurrentUser()
-      toast.success('Profile updated.')
-    } catch {
-      toast.error('Could not update profile.')
+      // The email is the login identifier, so say so rather than letting the
+      // change look cosmetic — the old address stops working immediately.
+      toast.success(emailChanged ? 'Profile updated. Sign in with your new email from now on.' : 'Profile updated.')
+    } catch (error) {
+      // Surfaces the server's reason (an address already in use, a malformed
+      // one) instead of a generic failure the user cannot act on.
+      toast.error(error instanceof ApiError ? error.message : 'Could not update profile.')
     } finally {
       setIsSaving(false)
     }
@@ -50,7 +59,20 @@ export default function ProfilePage() {
           <CardHeader title="Personal Information" />
           <form className="space-y-4" onSubmit={handleSave}>
             <Input label="Full Name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
-            <Input label="Email" value={user.email} disabled hint="Contact support to change your email address." />
+            <Input
+              label="Email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              hint="This is the address you sign in with."
+            />
+            <Input
+              label="Phone"
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              hint="Optional."
+            />
             <Input label="Username" value={user.username} disabled />
             <Button type="submit" isLoading={isSaving}>Save Changes</Button>
           </form>

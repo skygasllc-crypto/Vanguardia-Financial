@@ -57,7 +57,7 @@ async def seed_assets(db) -> None:
 
 
 async def seed_users(db) -> None:
-    admin_email = "admin@vanguardtrading.dev"
+    admin_email = "admin@vanguardiafinancial.com"
     existing_admin = (await db.execute(select(User).where(User.email == admin_email))).scalar_one_or_none()
     if existing_admin is None:
         admin = User(
@@ -68,7 +68,7 @@ async def seed_users(db) -> None:
         db.add(admin)
         await db.flush()
         db.add(Account(user_id=admin.id, currency=settings.DEFAULT_ACCOUNT_CURRENCY, available_balance=0))
-        print("Seeded admin user: admin@vanguardtrading.dev / ChangeMe123!  (change this immediately)")
+        print("Seeded admin user: admin@vanguardiafinancial.com / ChangeMe123!  (change this immediately)")
 
     demo_email = "demo@vanguardtrading.dev"
     existing_demo = (await db.execute(select(User).where(User.email == demo_email))).scalar_one_or_none()

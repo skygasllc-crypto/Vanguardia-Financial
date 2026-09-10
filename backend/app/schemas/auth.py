@@ -49,6 +49,9 @@ class UserPublic(BaseModel):
     email: EmailStr
     username: str
     full_name: str
+    #: Optional, and returned so the profile form can show what is stored
+    #: rather than presenting an empty box over an existing value.
+    phone: str | None = None
     status: UserStatus
     role: UserRole
     risk_status: RiskStatus
