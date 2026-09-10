@@ -6,7 +6,7 @@ this module writes an audit log entry.
 import uuid
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.account import Account
@@ -238,3 +238,99 @@ async def upsert_user_financial_settings(
     await publish_to_user(user_id, WSEvent.ADMIN_ACCOUNT_UPDATED, {"portfolio_value": str(settings_row.portfolio_value)})
     await publish_to_user(user_id, WSEvent.PORTFOLIO_UPDATED, {"reason": "admin_financial_settings_updated"})
     return settings_row
+
+
+#: Rows owned by the user, cleared before the user itself. Every foreign key
+#: into `users`/`accounts` is NO ACTION, so Postgres refuses to delete a user
+#: while any child row survives — and `trades` point at orders and positions,
+#: so they have to go before those do.
+_DELETE_BY_ACCOUNT = ("equity_snapshots", "transaction_ledger", "deposits", "withdrawals", "orders", "positions")
+_DELETE_BY_USER = (
+    ("transaction_ledger", "user_id"),
+    ("deposits", "user_id"),
+    ("withdrawals", "user_id"),
+    ("orders", "user_id"),
+    ("positions", "user_id"),
+    ("admin_adjustments", "user_id"),
+    ("admin_positions", "user_id"),
+    ("user_financial_settings", "user_id"),
+    ("notifications", "user_id"),
+    ("watchlist_items", "user_id"),
+    ("login_history", "user_id"),
+    ("user_sessions", "user_id"),
+)
+
+#: Columns naming the admin who *acted* on a row that belongs to someone else.
+#: These are blanked, never deleted — the row is another user's financial
+#: history and deleting it to remove an administrator would be destroying
+#: records that have nothing to do with them.
+_NULL_ADMIN_REFS = (
+    ("withdrawals", "reviewed_by"),
+    ("deposits", "admin_confirmed_by"),
+    ("user_financial_settings", "updated_by_admin_id"),
+    ("admin_positions", "updated_by_admin_id"),
+)
+
+#: The same relationship where the column is NOT NULL, so it cannot be blanked.
+#: Rather than delete another user's balance-adjustment history to make room,
+#: deletion is refused and the admin is told to deactivate instead.
+_BLOCKING_ADMIN_REFS = (
+    ("admin_adjustments", "admin_id", "balance adjustments"),
+    ("admin_positions", "created_by_admin_id", "admin-managed positions"),
+)
+
+
+async def delete_user(db: AsyncSession, admin: User, user: User, reason: str, ip_address: str | None) -> dict:
+    """Permanently delete a user and everything belonging to them.
+
+    Irreversible, and unlike suspending or banning it leaves no account behind
+    to reinstate. The audit entry is written first and outlives the user: its
+    `resource_id` is a plain column, not a foreign key, so the record of who
+    deleted whom survives the row it describes.
+    """
+    for table, column, label in _BLOCKING_ADMIN_REFS:
+        count = (await db.execute(
+            text(f"select count(*) from {table} where {column} = :uid"), {"uid": user.id}
+        )).scalar() or 0
+        if count:
+            raise AdminActionError(
+                f"This administrator recorded {count} {label} against other users. "
+                "Deleting them would delete those records too, so the account can only be deactivated."
+            )
+
+    await record_audit(
+        db, actor_id=admin.id, actor_type=AuditActorType.ADMIN, action="USER_DELETED",
+        resource_type="user", resource_id=user.id,
+        previous_data={"email": user.email, "username": user.username, "role": user.role.value},
+        reason=reason, ip_address=ip_address,
+    )
+
+    for table, column in _NULL_ADMIN_REFS:
+        await db.execute(text(f"update {table} set {column} = null where {column} = :uid"), {"uid": user.id})
+
+    deleted: dict[str, int] = {}
+
+    def _tally(table: str, rowcount: int | None) -> None:
+        if rowcount:
+            deleted[table] = deleted.get(table, 0) + rowcount
+
+    # Trades first: they reference the orders and positions cleared below.
+    _tally("trades", (await db.execute(text("delete from trades where user_id = :uid"), {"uid": user.id})).rowcount)
+
+    account_ids = (await db.execute(select(Account.id).where(Account.user_id == user.id))).scalars().all()
+    if account_ids:
+        for table in _DELETE_BY_ACCOUNT:
+            _tally(table, (await db.execute(
+                text(f"delete from {table} where account_id = any(:ids)"), {"ids": list(account_ids)}
+            )).rowcount)
+
+    for table, column in _DELETE_BY_USER:
+        _tally(table, (await db.execute(
+            text(f"delete from {table} where {column} = :uid"), {"uid": user.id}
+        )).rowcount)
+
+    _tally("accounts", (await db.execute(text("delete from accounts where user_id = :uid"), {"uid": user.id})).rowcount)
+    _tally("users", (await db.execute(text("delete from users where id = :uid"), {"uid": user.id})).rowcount)
+
+    await db.commit()
+    return deleted

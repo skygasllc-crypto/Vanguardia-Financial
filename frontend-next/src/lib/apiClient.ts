@@ -99,7 +99,10 @@ export const api = {
   post: <T>(path: string, body?: unknown) => apiRequest<T>(path, { method: 'POST', body }),
   patch: <T>(path: string, body?: unknown) => apiRequest<T>(path, { method: 'PATCH', body }),
   put: <T>(path: string, body?: unknown) => apiRequest<T>(path, { method: 'PUT', body }),
-  delete: <T>(path: string) => apiRequest<T>(path, { method: 'DELETE' }),
+  // Takes an optional body: a delete that has to be justified (an admin
+  // deleting a user) carries its reason here rather than in the query string,
+  // where a long or multiline reason does not belong.
+  delete: <T>(path: string, body?: unknown) => apiRequest<T>(path, { method: 'DELETE', body }),
   publicGet: <T>(path: string) => apiRequest<T>(path, { method: 'GET', auth: false }),
   publicPost: <T>(path: string, body?: unknown) => apiRequest<T>(path, { method: 'POST', body, auth: false }),
 }

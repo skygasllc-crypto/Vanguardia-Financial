@@ -76,6 +76,11 @@ function UserFinancialProfile() {
             onChanged={(next) =>
               setProfile((prev) => (prev ? { ...prev, user: { ...prev.user, status: next } } : prev))
             }
+            // The page is a view of one user; once deleted there is nothing
+            // left to render, so go back to the list. A full navigation rather
+            // than a client push, because every fetch this page made is now
+            // stale.
+            onDeleted={() => window.location.assign('/admin/users')}
           />
         </div>
       </div>

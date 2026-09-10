@@ -66,6 +66,14 @@ export const adminService = {
       { status, reason },
     ),
 
+  /** Permanently deletes a user and everything belonging to them. The reason
+   *  is required by the server and recorded in the audit log. */
+  deleteUser: (userId: string, reason: string) =>
+    api.delete<{ success: boolean; deleted: Record<string, number> }>(
+      `/admin/users/${userId}`,
+      { reason },
+    ),
+
   listUserAccounts: (userId: string) =>
     api.get<TradingAccount[]>(`/admin/users/${userId}/accounts`),
 

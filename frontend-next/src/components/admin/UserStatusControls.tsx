@@ -15,7 +15,11 @@ import type { UserStatus } from '@/types/user'
  * they leave, which is what makes a later review possible. Reinstating is kept
  * separate because it is the only one that does not need a justification. */
 const ACTIONS: {
-  status: Exclude<UserStatus, 'pending_verification' | 'active'>
+  /** `status` items change the account's state and are reversible. `delete`
+   *  removes the account outright and is not — it takes a different endpoint,
+   *  so the confirmation dialog routes on this. */
+  kind: 'status' | 'delete'
+  status: Exclude<UserStatus, 'pending_verification' | 'active'> | null
   label: string
   verb: string
   /** One line, shown under the item in the dropdown. */
@@ -25,6 +29,7 @@ const ACTIONS: {
   variant: 'secondary' | 'danger'
 }[] = [
   {
+    kind: 'status',
     status: 'suspended',
     label: 'Suspend',
     verb: 'Suspend',
@@ -33,6 +38,7 @@ const ACTIONS: {
     variant: 'secondary',
   },
   {
+    kind: 'status',
     status: 'deactivated',
     label: 'Deactivate',
     verb: 'Deactivate',
@@ -41,11 +47,22 @@ const ACTIONS: {
     variant: 'secondary',
   },
   {
+    kind: 'status',
     status: 'banned',
     label: 'Block',
     verb: 'Block',
     summary: 'Punitive, intended to be permanent.',
     description: 'Punitive and intended to be permanent. Use when the account should not return.',
+    variant: 'danger',
+  },
+  {
+    kind: 'delete',
+    status: null,
+    label: 'Delete',
+    verb: 'Delete',
+    summary: 'Erases the account and its history. Cannot be undone.',
+    description:
+      'Permanently erases the account together with its accounts, balances, orders, positions, trades and transaction history. Unlike blocking, nothing is left to reinstate and none of it can be recovered.',
     variant: 'danger',
   },
 ]
@@ -55,10 +72,13 @@ interface UserStatusControlsProps {
   status: UserStatus
   /** Called after a successful change so the caller can refresh its rows. */
   onChanged: (next: UserStatus) => void
+  /** Called after the account is deleted, so the caller can drop the row —
+   *  there is no status left to report. */
+  onDeleted?: () => void
   size?: 'sm' | 'md'
 }
 
-export function UserStatusControls({ userId, status, onChanged, size = 'sm' }: UserStatusControlsProps) {
+export function UserStatusControls({ userId, status, onChanged, onDeleted, size = 'sm' }: UserStatusControlsProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [pending, setPending] = useState<(typeof ACTIONS)[number] | null>(null)
   const [reason, setReason] = useState('')
@@ -95,17 +115,39 @@ export function UserStatusControls({ userId, status, onChanged, size = 'sm' }: U
     }
   }
 
+  async function remove(why: string) {
+    setIsSaving(true)
+    try {
+      const res = await adminService.deleteUser(userId, why)
+      const rows = Object.values(res.deleted ?? {}).reduce((sum, n) => sum + n, 0)
+      toast.success(`Account deleted. ${rows} ${rows === 1 ? 'record' : 'records'} removed.`)
+      setPending(null)
+      setReason('')
+      onDeleted?.()
+    } catch (err) {
+      // Covers the server's refusals too: deleting yourself, deleting another
+      // admin without super-admin rights, or an admin whose past actions on
+      // other users' records cannot be unpicked.
+      toast.error(err instanceof Error ? err.message : 'Could not delete the account.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
-        {isBlocked ? (
+        {isBlocked && (
           <Button size={size} variant="primary" isLoading={isSaving} onClick={() => apply('active')}>
             Reactivate
           </Button>
-        ) : (
-          <div className="relative">
+        )}
+        {/* The menu stays available on a blocked account, narrowed to Delete:
+            the usual reason to remove an account for good is that it has
+            already been blocked once. */}
+        <div className="relative">
             <Button size={size} variant="secondary" onClick={() => setMenuOpen((v) => !v)} aria-haspopup="menu" aria-expanded={menuOpen}>
-              Restrict
+              {isBlocked ? 'More' : 'Restrict'}
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="ml-1.5 inline-block" aria-hidden>
                 <path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
@@ -120,9 +162,9 @@ export function UserStatusControls({ userId, status, onChanged, size = 'sm' }: U
                   role="menu"
                   className="absolute right-0 z-20 mt-1.5 w-64 rounded-xl border border-slate-200 bg-white p-1.5 text-left shadow-[var(--shadow-card-lg)]"
                 >
-                  {ACTIONS.map((a) => (
+                  {ACTIONS.filter((a) => !isBlocked || a.kind === 'delete').map((a) => (
                     <button
-                      key={a.status}
+                      key={a.label}
                       role="menuitem"
                       onClick={() => {
                         setMenuOpen(false)
@@ -139,8 +181,7 @@ export function UserStatusControls({ userId, status, onChanged, size = 'sm' }: U
                 </div>
               </>
             )}
-          </div>
-        )}
+        </div>
       </div>
 
       <Modal
@@ -167,7 +208,11 @@ export function UserStatusControls({ userId, status, onChanged, size = 'sm' }: U
               // The server rejects a blocking change with no reason; mirroring
               // that here means the admin is told before the round trip.
               disabled={reason.trim().length === 0}
-              onClick={() => pending && apply(pending.status, reason.trim())}
+              onClick={() => {
+                if (!pending) return
+                if (pending.kind === 'delete') remove(reason.trim())
+                else if (pending.status) apply(pending.status, reason.trim())
+              }}
             >
               {pending?.verb}
             </Button>
@@ -177,7 +222,9 @@ export function UserStatusControls({ userId, status, onChanged, size = 'sm' }: U
         <div className="space-y-4">
           <p className="text-sm text-slate-600">{pending?.description}</p>
           <p className="text-sm text-slate-600">
-            The user is signed out immediately and cannot sign in again until an admin reinstates the account.
+            {pending?.kind === 'delete'
+              ? 'This cannot be undone. There will be no account left to reinstate.'
+              : 'The user is signed out immediately and cannot sign in again until an admin reinstates the account.'}
           </p>
           <label className="block">
             <span className="mb-1 block text-sm font-medium text-navy-800">

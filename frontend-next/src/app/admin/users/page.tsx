@@ -156,6 +156,7 @@ export default function AdminUsersPage() {
                             onChanged={(next) =>
                               setRows((prev) => prev.map((r) => (r.id === u.id ? { ...r, status: next } : r)))
                             }
+                            onDeleted={() => setRows((prev) => prev.filter((r) => r.id !== u.id))}
                           />
                         )}
                         <Link href={`/admin/users/detail?userId=${u.id}`}>

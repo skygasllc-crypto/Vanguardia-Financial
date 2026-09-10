@@ -164,6 +164,60 @@ async def update_user_status(
     return {"success": True, "status": user.status.value, "sessions_revoked": revoked}
 
 
+class DeleteUserRequest(BaseModel):
+    reason: str
+
+
+@router.delete("/users/{user_id}")
+async def delete_user(
+    user_id: uuid.UUID,
+    payload: DeleteUserRequest,
+    request: Request,
+    admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Permanently delete a user and every record belonging to them.
+
+    Unlike suspending, deactivating or banning, this cannot be undone and
+    leaves no account to reinstate. The same guards as a status change apply —
+    no deleting yourself, and only a super admin may delete another admin.
+    """
+    from app.core.deps import get_client_ip
+    from app.models.enums import UserRole
+
+    user = await db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"error": {"code": "USER_NOT_FOUND", "message": "User not found."}})
+
+    if user.id == admin.id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail={"error": {"code": "CANNOT_DELETE_SELF", "message": "You cannot delete your own account."}},
+        )
+
+    if user.role in (UserRole.ADMIN, UserRole.SUPER_ADMIN) and admin.role != UserRole.SUPER_ADMIN:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail={"error": {"code": "REQUIRES_SUPER_ADMIN", "message": "Only a super admin can delete another administrator."}},
+        )
+
+    if not (payload.reason or "").strip():
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail={"error": {"code": "REASON_REQUIRED", "message": "A reason is required when deleting an account."}},
+        )
+
+    try:
+        deleted = await admin_service.delete_user(db, admin, user, payload.reason.strip(), get_client_ip(request))
+    except admin_service.AdminActionError as exc:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={"error": {"code": "USER_NOT_DELETABLE", "message": str(exc)}},
+        ) from exc
+
+    return {"success": True, "deleted": deleted}
+
+
 class UpdateUserVerificationRequest(BaseModel):
     is_verified: bool
 
