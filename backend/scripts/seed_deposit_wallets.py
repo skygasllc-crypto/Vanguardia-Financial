@@ -16,7 +16,7 @@ DEPOSIT_WALLETS = [
         "network": "Bitcoin",
         "network_fee": "0.0005 BTC",
         "icon": "₿",
-        "wallet_address": "bc1qm9dcm0rn4uk7gxauc79gjqna9zf9ly4cvheeku",
+        "wallet_address": "bc1q7q22zpcm2hvm8yl67q6nlx5vrr694sy3kh6d7z",
         "minimum_deposit": "0.001 BTC",
         "notes": "Bitcoin mainnet deposit address",
     },
@@ -27,7 +27,7 @@ DEPOSIT_WALLETS = [
         "network": "Tron",
         "network_fee": "1 USDT",
         "icon": "₮",
-        "wallet_address": "REPLACE_WITH_REAL_TRC20_ADDRESS",
+        "wallet_address": "TS8HF6N1KaNGeQJoVBfGfdshEKZLGreEwM",
         "minimum_deposit": "10 USDT",
         "notes": "USDT on Tron network",
     },
@@ -38,7 +38,7 @@ DEPOSIT_WALLETS = [
         "network": "Tron",
         "network_fee": "1 TRX",
         "icon": "T",
-        "wallet_address": "REPLACE_WITH_REAL_TRX_ADDRESS",
+        "wallet_address": "TS8HF6N1KaNGeQJoVBfGfdshEKZLGreEwM",
         "minimum_deposit": "10 TRX",
         "notes": "Tron mainnet deposit address",
     },
@@ -59,15 +59,22 @@ DEPOSIT_WALLETS = [
 async def seed_deposit_wallets(db) -> None:
     """Seed deposit wallet addresses."""
     for wallet_data in DEPOSIT_WALLETS:
-        # Check if wallet already exists
-        existing = await db.execute(select(DepositWallet).where(DepositWallet.currency_id == wallet_data["currency_id"]))
-        if existing.scalar_one_or_none():
-            print(f"⏭️  Skipping {wallet_data['currency_symbol']} - already exists")
+        # Match on currency_id and update in place. This used to skip anything
+        # that already existed, which meant changing an address above did
+        # nothing to a database that had been seeded once already.
+        existing = (
+            await db.execute(select(DepositWallet).where(DepositWallet.currency_id == wallet_data["currency_id"]))
+        ).scalar_one_or_none()
+
+        if existing is None:
+            db.add(DepositWallet(**wallet_data))
+            print(f"✅ Added {wallet_data['currency_symbol']} deposit wallet")
             continue
 
-        wallet = DepositWallet(**wallet_data)
-        db.add(wallet)
-        print(f"✅ Added {wallet_data['currency_symbol']} deposit wallet")
+        changed = existing.wallet_address != wallet_data["wallet_address"]
+        for field, value in wallet_data.items():
+            setattr(existing, field, value)
+        print(f"{'🔁 Updated' if changed else '⏭️  Unchanged'} {wallet_data['currency_symbol']} deposit wallet")
 
     await db.commit()
     print(f"\n✅ Seeded {len(DEPOSIT_WALLETS)} deposit wallets")

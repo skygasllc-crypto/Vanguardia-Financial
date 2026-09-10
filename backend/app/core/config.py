@@ -2,6 +2,7 @@
 from functools import lru_cache
 from typing import List
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -72,6 +73,38 @@ class Settings(BaseSettings):
     # Email
     EMAIL_FROM: str = "no-reply@vanguardtrading.dev"
     EMAIL_PROVIDER: str = "console"
+
+    @field_validator("DATABASE_URL", mode="after")
+    @classmethod
+    def _force_async_driver(cls, url: str) -> str:
+        """Rewrite a driverless Postgres URL onto asyncpg.
+
+        Managed hosts inject their own connection string — Render's
+        `fromDatabase` property and Heroku's DATABASE_URL both hand over
+        `postgresql://...` (Heroku still uses the older `postgres://`), with no
+        driver named. SQLAlchemy then loads its default psycopg2 dialect, and
+        both the app engine and Alembic's `async_engine_from_config` fail on it
+        with "The asyncio extension requires an async driver". That surfaces as
+        a failed pre-deploy migration, before the service ever starts.
+
+        Only the scheme is touched, so an explicit `+asyncpg` (or any other
+        driver someone deliberately chose) is left exactly as written.
+        """
+        if url.startswith("postgres://"):
+            return "postgresql+asyncpg://" + url[len("postgres://"):]
+        if url.startswith("postgresql://"):
+            return "postgresql+asyncpg://" + url[len("postgresql://"):]
+        return url
+
+    @field_validator("DATABASE_URL_SYNC", mode="after")
+    @classmethod
+    def _force_sync_driver(cls, url: str) -> str:
+        """Same fix for the sync URL, which wants psycopg2 rather than asyncpg."""
+        if url.startswith("postgres://"):
+            return "postgresql+psycopg2://" + url[len("postgres://"):]
+        if url.startswith("postgresql://"):
+            return "postgresql+psycopg2://" + url[len("postgresql://"):]
+        return url
 
     @property
     def cors_origins_list(self) -> List[str]:

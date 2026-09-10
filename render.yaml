@@ -18,8 +18,18 @@ services:
     # Deliberately not `free`: this process must stay awake. See note above.
     plan: starter
     buildCommand: "pip install -r backend/requirements.txt"
-    # Migrations run on deploy so the schema is never behind the code.
-    preDeployCommand: "cd backend && alembic upgrade head"
+    # Runs on every deploy, before the new version goes live. All three steps
+    # are idempotent, so redeploying is safe.
+    #
+    #   alembic          — schema is never behind the code
+    #   seed_universe    — the tradeable asset list; without it the markets
+    #                      are empty and nothing is quotable
+    #   seed_deposit_wallets — the live deposit addresses users are shown
+    #
+    # `scripts/seed.py` is deliberately NOT run here: it creates a SUPER_ADMIN
+    # (admin@vanguardtrading.dev) with a hardcoded password committed to this
+    # repo. Create the production admin by hand instead.
+    preDeployCommand: "cd backend && alembic upgrade head && python -m scripts.seed_universe && python -m scripts.seed_deposit_wallets"
     startCommand: "cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
     healthCheckPath: /api/health
     envVars:
