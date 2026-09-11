@@ -1,11 +1,10 @@
 # Vanguard Trading
 
-A professional, **simulated paper-trading** cryptocurrency investment platform. Clean, institutional design in the spirit of Vanguard
+A professional, **Trading Platform** cryptocurrency  and other assets investment platform. Clean, institutional design in the spirit of Vanguard
 Investor — original branding, not a copy — built as two independent applications (`/frontend`, `/backend`) talking over a REST API and
 WebSockets.
 
-> **This is a simulation.** No real cryptocurrency, funds, or securities are ever held, transacted, deposited, or withdrawn. Prices move
-> via a controlled random-walk engine, clearly labeled throughout the UI as **Simulated / Paper Trading Mode**.
+
 
 ---
 
