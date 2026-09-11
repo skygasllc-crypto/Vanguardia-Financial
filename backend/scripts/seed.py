@@ -16,9 +16,10 @@ from app.core.security import hash_password
 from app.database.session import AsyncSessionLocal
 from app.models.account import Account
 from app.models.asset import Asset
-from app.models.enums import UserRole, UserStatus
+from app.models.enums import AccountType, UserRole, UserStatus
 from app.models.market_price import MarketPrice
 from app.models.user import User
+from app.services.account_service import create_account
 
 ASSETS = [
     {"symbol": "BTC", "name": "Bitcoin", "base_price": Decimal("98420.00"), "ath": Decimal("108135"), "atl": Decimal("67.81"), "supply": Decimal("19700000"), "trending": True},
@@ -85,7 +86,11 @@ async def seed_users(db) -> None:
         )
         db.add(admin)
         await db.flush()
-        db.add(Account(user_id=admin.id, currency=settings.DEFAULT_ACCOUNT_CURRENCY, available_balance=0))
+        # Same two accounts every registered user gets, opened the same way so
+        # the account number is allocated. Building the row here skipped that
+        # and hit the NOT NULL constraint on `account_number`.
+        await create_account(db, admin.id, AccountType.DEMO, initial_balance=Decimal(0))
+        await create_account(db, admin.id, AccountType.REAL, initial_balance=Decimal(0))
         print(f"Seeded admin user: {admin_email}")
         if generated:
             print(f"  generated password (shown once, store it now): {admin_password}")
@@ -102,7 +107,8 @@ async def seed_users(db) -> None:
         )
         db.add(demo)
         await db.flush()
-        db.add(Account(user_id=demo.id, currency=settings.DEFAULT_ACCOUNT_CURRENCY, available_balance=settings.STARTING_PAPER_BALANCE))
+        await create_account(db, demo.id, AccountType.DEMO)
+        await create_account(db, demo.id, AccountType.REAL, initial_balance=Decimal(0))
         print(f"Seeded demo user: {demo_email}")
         if demo_generated:
             print(f"  generated password (shown once, store it now): {demo_password}")

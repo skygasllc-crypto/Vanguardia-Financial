@@ -57,14 +57,16 @@ async def get_or_create_account(db: AsyncSession, user_id: uuid.UUID, account_ty
         # For crypto deposits, start with 0 balance. For USD/fiat accounts, use starting balance
         starting_balance = Decimal(0) if currency and currency != "USD" else settings.STARTING_PAPER_BALANCE
 
-        account = Account(
-            user_id=user_id,
-            currency=account_currency,
-            available_balance=starting_balance,
-            account_type=account_type,
+        # Opened through `create_account` rather than built here: that is the
+        # only place which allocates `account_number`, which is NOT NULL since
+        # multi-account. Constructing the row inline failed the constraint the
+        # moment this path was reached — a deposit in a currency the user had
+        # no account for.
+        from app.services.account_service import create_account
+
+        account = await create_account(
+            db, user_id, account_type, currency=account_currency, initial_balance=starting_balance
         )
-        db.add(account)
-        await db.flush()
     return account
 
 

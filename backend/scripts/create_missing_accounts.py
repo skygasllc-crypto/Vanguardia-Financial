@@ -9,6 +9,7 @@ from app.database.session import AsyncSessionLocal
 from app.models.account import Account
 from app.models.enums import AccountType
 from app.models.user import User
+from app.services.account_service import create_account
 
 
 async def create_missing_accounts():
@@ -32,14 +33,9 @@ async def create_missing_accounts():
 
             if demo_account is None:
                 print(f"  Creating DEMO account for {user.email}")
-                demo_account = Account(
-                    user_id=user.id,
-                    currency=settings.DEFAULT_ACCOUNT_CURRENCY,
-                    account_type=AccountType.DEMO,
-                    available_balance=settings.STARTING_PAPER_BALANCE,
-                    locked_balance=0,
-                )
-                db.add(demo_account)
+                # `create_account` allocates the account number; building the
+                # row here left it null, which the column forbids.
+                demo_account = await create_account(db, user.id, AccountType.DEMO)
             else:
                 print(f"  DEMO account exists for {user.email}")
 
@@ -54,14 +50,7 @@ async def create_missing_accounts():
 
             if real_account is None:
                 print(f"  Creating REAL account for {user.email}")
-                real_account = Account(
-                    user_id=user.id,
-                    currency=settings.DEFAULT_ACCOUNT_CURRENCY,
-                    account_type=AccountType.REAL,
-                    available_balance=0,
-                    locked_balance=0,
-                )
-                db.add(real_account)
+                real_account = await create_account(db, user.id, AccountType.REAL)
             else:
                 print(f"  REAL account exists for {user.email}")
 
