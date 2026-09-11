@@ -79,9 +79,23 @@ automatically on first boot.
    ```
    Open `http://localhost:5173`. Vite proxies `/api` and `/ws` to `localhost:8000` automatically (see `frontend/vite.config.ts`).
 
-5. Log in with the seeded demo accounts:
-   - **Investor:** `demo@vanguardtrading.dev` / `DemoUser123!`
-   - **Admin:** `admin@vanguardtrading.dev` / `ChangeMe123!` (change this password immediately in a real deployment)
+5. Log in with the seeded accounts.
+
+   `scripts/seed.py` prints each password once, when it creates the account.
+   Nothing here ships a working credential — this repository is public, and a
+   password written in it is a live login to every deployment seeded from it.
+
+   Set your own before seeding:
+
+   ```bash
+   ADMIN_SEED_PASSWORD='choose-a-strong-one' \
+   DEMO_SEED_PASSWORD='another-one' \
+   python -m scripts.seed
+   ```
+
+   With neither set, a random password is generated and printed once — copy it
+   from that output, it is not recoverable afterwards. Seeded users are
+   `admin@vanguardiafinancial.com` and `demo@vanguardtrading.dev`.
 
 ---
 

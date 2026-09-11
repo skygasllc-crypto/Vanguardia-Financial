@@ -5,6 +5,8 @@ already exist.
 Usage: python -m scripts.seed
 """
 import asyncio
+import os
+import secrets
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -56,31 +58,54 @@ async def seed_assets(db) -> None:
     print(f"Seeded {len(ASSETS)} assets.")
 
 
+def _seed_password(env_var: str) -> tuple[str, bool]:
+    """The password to seed, and whether it had to be generated.
+
+    Taken from the environment so this file never carries a working credential.
+    It used to hardcode one, which is published with the repository and was
+    therefore a live login to any deployment seeded from it. With nothing set,
+    a random password is generated and printed once — recoverable only from
+    that output, which is the right default for an account nobody has claimed.
+    """
+    supplied = os.environ.get(env_var, "").strip()
+    if supplied:
+        return supplied, False
+    return secrets.token_urlsafe(18), True
+
+
 async def seed_users(db) -> None:
-    admin_email = "admin@vanguardiafinancial.com"
+    admin_email = os.environ.get("ADMIN_SEED_EMAIL", "admin@vanguardiafinancial.com").strip()
     existing_admin = (await db.execute(select(User).where(User.email == admin_email))).scalar_one_or_none()
     if existing_admin is None:
+        admin_password, generated = _seed_password("ADMIN_SEED_PASSWORD")
         admin = User(
-            email=admin_email, username="admin", password_hash=hash_password("ChangeMe123!"),
+            email=admin_email, username="admin", password_hash=hash_password(admin_password),
             full_name="Platform Administrator", status=UserStatus.ACTIVE, role=UserRole.SUPER_ADMIN,
             is_verified=True,
         )
         db.add(admin)
         await db.flush()
         db.add(Account(user_id=admin.id, currency=settings.DEFAULT_ACCOUNT_CURRENCY, available_balance=0))
-        print("Seeded admin user: admin@vanguardiafinancial.com / ChangeMe123!  (change this immediately)")
+        print(f"Seeded admin user: {admin_email}")
+        if generated:
+            print(f"  generated password (shown once, store it now): {admin_password}")
+        else:
+            print("  password taken from ADMIN_SEED_PASSWORD")
 
     demo_email = "demo@vanguardtrading.dev"
     existing_demo = (await db.execute(select(User).where(User.email == demo_email))).scalar_one_or_none()
     if existing_demo is None:
+        demo_password, demo_generated = _seed_password("DEMO_SEED_PASSWORD")
         demo = User(
-            email=demo_email, username="demo_investor", password_hash=hash_password("DemoUser123!"),
+            email=demo_email, username="demo_investor", password_hash=hash_password(demo_password),
             full_name="Demo Investor", status=UserStatus.ACTIVE, role=UserRole.USER, is_verified=True,
         )
         db.add(demo)
         await db.flush()
         db.add(Account(user_id=demo.id, currency=settings.DEFAULT_ACCOUNT_CURRENCY, available_balance=settings.STARTING_PAPER_BALANCE))
-        print("Seeded demo user: demo@vanguardtrading.dev / DemoUser123!")
+        print(f"Seeded demo user: {demo_email}")
+        if demo_generated:
+            print(f"  generated password (shown once, store it now): {demo_password}")
 
     await db.commit()
 

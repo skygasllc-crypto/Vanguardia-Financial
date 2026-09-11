@@ -269,7 +269,7 @@ curl -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{
     "email": "admin@vanguardtrading.dev",
-    "password": "ChangeMe123!"
+    "password": "<your admin password>"
   }'
 
 # Save the access_token

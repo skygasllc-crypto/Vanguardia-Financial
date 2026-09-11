@@ -83,7 +83,7 @@ Authorization: Bearer <admin_access_token>
      -H "Content-Type: application/json" \
      -d '{
        "email": "admin@vanguardtrading.dev",
-       "password": "ChangeMe123!"
+       "password": "<your admin password>"
      }'
    ```
 
