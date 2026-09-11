@@ -67,7 +67,7 @@ export function PublicFooter() {
 
         <div className="mt-12 flex flex-col gap-4 border-t border-slate-100 pt-6 text-xs text-slate-400 sm:flex-row sm:items-center sm:justify-between">
           <p>© {new Date().getFullYear()} Vanguardia Financial. All rights reserved.</p>
-          <p>Professional cryptocurrency trading platform.</p>
+          <p>Professional trading platform for all assets.</p>
         </div>
       </div>
     </footer>
