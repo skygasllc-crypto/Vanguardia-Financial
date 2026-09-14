@@ -16,9 +16,11 @@ import { useAccountStore } from '@/store/accountStore'
 import { useAuthStore } from '@/store/authStore'
 import { useMarketStore } from '@/store/marketStore'
 import { usePortfolioStore } from '@/store/portfolioStore'
+import { usePositionsStore } from '@/store/positionsStore'
 import { useWatchlistStore } from '@/store/watchlistStore'
 import { formatCurrency, formatDateTime, formatNumber, formatPercent } from '@/lib/format'
 import { signedLedgerAmount } from '@/lib/ledger'
+import { todaysPnl } from '@/lib/pnl'
 
 const RANGES = ['1D', '1W', '1M', '3M', '1Y', 'ALL'] as const
 
@@ -37,6 +39,7 @@ function buildSyntheticHistory(currentValue: number): { time: number; value: num
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user)
   const summary = usePortfolioStore((s) => s.summary)
+  const positions = usePositionsStore((s) => s.positions)
   const activeAccountId = useAccountsStore((s) => s.activeAccountId)
   const fetchAccounts = useAccountsStore((s) => s.fetchAccounts)
   const assets = useMarketStore((s) => s.assets)
@@ -56,6 +59,7 @@ export default function DashboardPage() {
   }, [fetchAccounts])
 
   const history = useMemo(() => buildSyntheticHistory(Number(summary?.total_portfolio_value ?? 0)), [summary?.total_portfolio_value, range])
+  const livePnl = useMemo(() => todaysPnl(positions), [positions])
 
   const topMovers = useMemo(
     () => Object.values(assets).sort((a, b) => Math.abs(Number(b.change_24h_pct)) - Math.abs(Number(a.change_24h_pct))).slice(0, 5),
@@ -72,6 +76,16 @@ export default function DashboardPage() {
   }
 
   const isPositiveTotal = Number(summary.total_profit_loss) >= 0
+  // Today's P&L from the selected account's positions, so an open trade's
+  // profit or loss shows live rather than only once it is closed. The
+  // percentage is against the value before today's result. Admin-managed
+  // figures are set by an admin and are shown as given.
+  const isAdminManaged = summary.data_source === 'admin_managed'
+  const dailyPnl = isAdminManaged ? summary.daily_profit_loss : livePnl
+  const openingValue = Number(summary.total_portfolio_value) - Number(dailyPnl)
+  const dailyPnlPct = isAdminManaged
+    ? summary.daily_profit_loss_pct
+    : openingValue > 0 ? (Number(dailyPnl) / openingValue) * 100 : 0
 
   return (
     <div className="space-y-6">
@@ -93,8 +107,8 @@ export default function DashboardPage() {
             <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Total Portfolio Value</p>
             <p className="mt-1 font-display text-4xl font-bold tabular-nums text-navy-900">{formatCurrency(summary.total_portfolio_value, summary.currency)}</p>
             <div className="mt-2 flex items-center gap-2">
-              <PnLText value={summary.daily_profit_loss} />
-              <PnLText value={summary.daily_profit_loss_pct} mode="percent" />
+              <PnLText value={dailyPnl} />
+              <PnLText value={dailyPnlPct} mode="percent" />
               <span className="text-sm text-slate-400">Today</span>
             </div>
           </div>
