@@ -13,6 +13,8 @@ import { LivePositionsTable } from '@/components/trading/LivePositionsTable'
 import { useAccountStore } from '@/store/accountStore'
 import { useAccountsStore } from '@/store/accountsStore'
 import { usePortfolioStore } from '@/store/portfolioStore'
+import { usePositionsStore } from '@/store/positionsStore'
+import type { Position } from '@/types/trading'
 import { formatCurrency, formatDateTime, formatPercent } from '@/lib/format'
 import { signedLedgerAmount } from '@/lib/ledger'
 
@@ -30,12 +32,27 @@ function buildSyntheticHistory(currentValue: number): { time: number; value: num
   return points
 }
 
+/** Open trades' unrealised P&L and the amount invested in them, from the
+ * positions list — already scoped to the selected account, so demo and real
+ * stay apart. */
+function openPnl(positions: Position[]): { unrealized: number; invested: number } {
+  let unrealized = 0
+  let invested = 0
+  for (const p of positions) {
+    if (p.status !== 'open') continue
+    unrealized += Number(p.unrealized_profit_loss)
+    invested += Number(p.total_cost_basis)
+  }
+  return { unrealized, invested }
+}
+
 export default function PortfolioPage() {
   const summary = usePortfolioStore((s) => s.summary)
   const transactions = useAccountStore((s) => s.transactions)
   const fetchTransactions = useAccountStore((s) => s.fetchTransactions)
   const activeAccountId = useAccountsStore((s) => s.activeAccountId)
   const activeAccount = useAccountsStore((s) => s.accounts.find((a) => a.id === s.activeAccountId))
+  const positions = usePositionsStore((s) => s.positions)
   const [range, setRange] = useState<(typeof RANGES)[number]>('1M')
 
   // Reloads on an account switch so this page shows the selected account's
@@ -45,6 +62,7 @@ export default function PortfolioPage() {
   }, [activeAccountId, fetchTransactions])
 
   const history = useMemo(() => buildSyntheticHistory(Number(summary?.total_portfolio_value ?? 0)), [summary?.total_portfolio_value, range])
+  const live = useMemo(() => openPnl(positions), [positions])
 
   if (!summary) {
     return (
@@ -55,7 +73,18 @@ export default function PortfolioPage() {
     )
   }
 
-  const isPositiveTotal = Number(summary.total_profit_loss) >= 0
+  // The summary is refetched on each price tick but reads the previous tick's
+  // figures, so open-trade P&L comes from the positions, which update live.
+  // Admin-managed figures are set by an admin and are shown as given.
+  const isAdminManaged = summary.data_source === 'admin_managed'
+  const unrealizedPnl = isAdminManaged ? summary.total_unrealized_profit_loss : live.unrealized
+  const totalPnl = isAdminManaged
+    ? summary.total_profit_loss
+    : Number(summary.total_realized_profit_loss) + live.unrealized
+  const totalPnlPct = isAdminManaged
+    ? summary.total_profit_loss_pct
+    : live.invested ? (live.unrealized / live.invested) * 100 : 0
+  const isPositiveTotal = Number(totalPnl) >= 0
 
   return (
     <div className="space-y-6">
@@ -80,8 +109,8 @@ export default function PortfolioPage() {
       <Card>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <PnLText value={summary.total_profit_loss} size="lg" />
-            <PnLText value={summary.total_profit_loss_pct} mode="percent" size="lg" />
+            <PnLText value={totalPnl} size="lg" />
+            <PnLText value={totalPnlPct} mode="percent" size="lg" />
           </div>
           <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
             {RANGES.map((r) => (
@@ -130,9 +159,9 @@ export default function PortfolioPage() {
               ['Available Cash', formatCurrency(summary.available_cash_balance, summary.currency)],
               ['Locked Balance', formatCurrency(summary.locked_balance, summary.currency)],
               ['Crypto Assets', formatCurrency(summary.value_of_crypto_assets, summary.currency)],
-              ['Unrealized P&L', formatCurrency(summary.total_unrealized_profit_loss, summary.currency)],
+              ['Unrealized P&L', formatCurrency(unrealizedPnl, summary.currency)],
               ['Realized P&L', formatCurrency(summary.total_realized_profit_loss, summary.currency)],
-              ['Total P&L', formatCurrency(summary.total_profit_loss, summary.currency)],
+              ['Total P&L', formatCurrency(totalPnl, summary.currency)],
             ].map(([label, value]) => (
               <div key={label} className="rounded-lg bg-slate-50 px-4 py-3">
                 <p className="text-xs text-slate-500">{label}</p>

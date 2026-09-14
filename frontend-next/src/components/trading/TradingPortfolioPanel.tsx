@@ -1,6 +1,6 @@
 'use client'
 
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useMemo, useState } from 'react'
 
 import { Badge } from '@/components/common/Badge'
 import { Button } from '@/components/common/Button'
@@ -8,19 +8,27 @@ import { PnLText } from '@/components/common/PnLText'
 import { LivePositionsTable } from '@/components/trading/LivePositionsTable'
 import { OrdersHistoryPanel } from '@/components/trading/OrdersHistoryPanel'
 import { usePortfolioStore } from '@/store/portfolioStore'
+import { usePositionsStore } from '@/store/positionsStore'
+import type { Position } from '@/types/trading'
 import { cn } from '@/lib/cn'
 import { formatCurrency } from '@/lib/format'
 
 const TABS = ['Live Positions', 'Orders & History'] as const
+const DAY_MS = 24 * 60 * 60 * 1000
 
 /** The account/portfolio strip beneath the trading workspace — a WebTrader
  * "Portfolio" panel: balance summary + Buy/Sell entry point on top, live
  * positions and order/trade history in a single unified panel below. */
 export function TradingPortfolioPanel({ onPlaceOrder }: { onPlaceOrder: () => void }) {
   const summary = usePortfolioStore((s) => s.summary)
+  const positions = usePositionsStore((s) => s.positions)
   const [tab, setTab] = useState<(typeof TABS)[number]>('Live Positions')
 
   const isAdminManaged = summary?.data_source === 'admin_managed'
+  const livePnl = useMemo(() => todaysPnl(positions), [positions])
+  // Admin-managed figures are set by an admin rather than derived from the
+  // positions, so they are shown as given.
+  const todaysPnlValue = isAdminManaged ? (summary?.daily_profit_loss ?? 0) : livePnl
 
   return (
     <div className="rounded-2xl border border-slate-200/80 bg-white shadow-[var(--shadow-card)]">
@@ -35,7 +43,7 @@ export function TradingPortfolioPanel({ onPlaceOrder }: { onPlaceOrder: () => vo
             </div>
           </div>
           <AccountStat label="Equity" value={formatCurrency(summary?.total_portfolio_value ?? 0)} />
-          <AccountStat label="Today's P&L" value={<PnLText value={summary?.daily_profit_loss ?? 0} size="sm" />} />
+          <AccountStat label="Today's P&L" value={<PnLText value={todaysPnlValue} size="sm" />} />
           <AccountStat label="Free" value={formatCurrency(summary?.available_cash_balance ?? 0)} />
         </div>
         <Button variant="buy" size="sm" onClick={onPlaceOrder}>
@@ -63,6 +71,23 @@ export function TradingPortfolioPanel({ onPlaceOrder }: { onPlaceOrder: () => vo
       </div>
     </div>
   )
+}
+
+/** Today's P&L worked out from the positions themselves, so it moves with every
+ * price tick instead of waiting for a trade to close: open trades' unrealised
+ * P&L plus the result of trades closed in the last 24 hours. The positions list
+ * is already scoped to the selected account, so demo and real stay apart. */
+function todaysPnl(positions: Position[]): number {
+  const since = Date.now() - DAY_MS
+  let total = 0
+  for (const p of positions) {
+    if (p.status === 'open') {
+      total += Number(p.unrealized_profit_loss)
+    } else if (p.closed_at && new Date(p.closed_at).getTime() >= since) {
+      total += Number(p.realized_profit_loss ?? 0)
+    }
+  }
+  return total
 }
 
 function AccountStat({ label, value }: { label: string; value: ReactNode }) {
