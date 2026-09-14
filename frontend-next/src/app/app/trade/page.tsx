@@ -4,7 +4,6 @@ import { type CSSProperties, type MouseEvent, type ReactNode, Suspense, useEffec
 import { useRouter, useSearchParams } from 'next/navigation'
 
 import { CandlestickChart } from '@/components/charts/CandlestickChart'
-import { AccountSwitcher } from '@/components/accounts/AccountSwitcher'
 import { Badge } from '@/components/common/Badge'
 import { PnLText } from '@/components/common/PnLText'
 import { Spinner } from '@/components/common/Spinner'
@@ -192,7 +191,6 @@ function TradingTerminal() {
               <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Available Balance</p>
               <p className="mt-0.5 font-semibold tabular-nums text-white">{formatCurrency(summary?.available_cash_balance ?? 0)}</p>
             </div>
-            <AccountSwitcher dark />
           </div>
         </div>
         {isLoading && !detail ? (

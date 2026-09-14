@@ -34,6 +34,7 @@ export default function PortfolioPage() {
   const transactions = useAccountStore((s) => s.transactions)
   const fetchTransactions = useAccountStore((s) => s.fetchTransactions)
   const activeAccountId = useAccountsStore((s) => s.activeAccountId)
+  const activeAccount = useAccountsStore((s) => s.accounts.find((a) => a.id === s.activeAccountId))
   const [range, setRange] = useState<(typeof RANGES)[number]>('1M')
 
   // Reloads on an account switch so this page shows the selected account's
@@ -59,6 +60,16 @@ export default function PortfolioPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
+          {/* Names the account these figures belong to: demo and real each have
+              their own portfolio, and nothing else on the page says which. */}
+          {activeAccount && (
+            <div className="mb-2 flex items-center gap-2">
+              <Badge tone={activeAccount.account_type === 'demo' ? 'neutral' : 'gain'} className="uppercase">
+                {activeAccount.account_type === 'demo' ? 'Demo account' : 'Real account'}
+              </Badge>
+              <span className="font-mono text-xs text-slate-500">{activeAccount.account_number}</span>
+            </div>
+          )}
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Total Portfolio Value</p>
           <p className="mt-1 font-display text-4xl font-bold tabular-nums text-navy-900">{formatCurrency(summary.total_portfolio_value, summary.currency)}</p>
         </div>

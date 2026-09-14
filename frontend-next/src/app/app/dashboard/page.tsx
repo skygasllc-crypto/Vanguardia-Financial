@@ -5,7 +5,6 @@ import Link from 'next/link'
 
 import { AllocationDonut, allocationColor } from '@/components/charts/AllocationDonut'
 import { PortfolioAreaChart } from '@/components/charts/PortfolioAreaChart'
-import { AccountSwitcher } from '@/components/accounts/AccountSwitcher'
 import { Badge } from '@/components/common/Badge'
 import { Card, CardHeader } from '@/components/common/Card'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -83,7 +82,6 @@ export default function DashboardPage() {
           <p className="text-sm text-slate-500">Here&apos;s how your portfolio is performing.</p>
         </div>
         <div className="flex items-center gap-3">
-          <AccountSwitcher />
           {summary.data_source === 'admin_managed' && <Badge tone="gold">Admin-managed</Badge>}
         </div>
       </div>

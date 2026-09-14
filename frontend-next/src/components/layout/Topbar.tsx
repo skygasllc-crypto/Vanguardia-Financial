@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
+import { AccountSwitcher } from '@/components/accounts/AccountSwitcher'
 import { LiveIndicator } from '@/components/common/LiveIndicator'
 import { ChevronDownIcon, MenuIcon } from '@/components/layout/icons'
 import { useAuthStore } from '@/store/authStore'
@@ -20,15 +21,19 @@ export function Topbar({ title, onMenuClick }: { title: string; onMenuClick?: ()
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-white/90 px-4 backdrop-blur sm:px-6 lg:px-8">
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 items-center gap-3">
         <button className="rounded-md p-1.5 text-navy-700 lg:hidden" onClick={onMenuClick} aria-label="Open navigation menu">
           <MenuIcon />
         </button>
-        <h1 className="font-display text-lg font-semibold text-navy-900">{title}</h1>
+        <h1 className="truncate font-display text-lg font-semibold text-navy-900">{title}</h1>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3 sm:gap-4">
         <LiveIndicator className="hidden sm:flex" />
+
+        {/* On every app page: portfolio, positions, orders and wallet all follow
+            the account picked here, so it has to be reachable from all of them. */}
+        <AccountSwitcher />
 
         <div className="relative">
           <button
