@@ -162,7 +162,17 @@ function UserFinancialProfile() {
                     const pnlPct = Number(position.unrealized_profit_loss_pct)
                     return (
                       <tr key={position.id} className="border-b border-slate-50 last:border-0">
-                        <td className="py-3 pr-4 font-semibold text-navy-900">{position.symbol}</td>
+                        <td className="py-3 pr-4 font-semibold text-navy-900">
+                          {position.symbol}
+                          {position.admin_price_override != null && (
+                            <span
+                              className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-700"
+                              title={`Pinned at ${formatCurrency(position.admin_price_override)}; ignores market price until unpinned`}
+                            >
+                              Pinned
+                            </span>
+                          )}
+                        </td>
                         <td className="py-3 pr-4 tabular-nums text-navy-800">{position.quantity}</td>
                         <td className="py-3 pr-4 tabular-nums text-navy-800">{formatCurrency(position.average_entry_price)}</td>
                         <td className="py-3 pr-4 tabular-nums text-navy-800">{formatCurrency(position.current_market_price)}</td>

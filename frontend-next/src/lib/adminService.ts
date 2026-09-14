@@ -60,6 +60,10 @@ export const adminService = {
   setPositionPrice: (positionId: string, price: number, reason?: string) =>
     api.post<Position>(`/admin/positions/${positionId}/set-price`, { price, reason }),
 
+  /** Release a pinned position so it follows the market again. */
+  unpinPosition: (positionId: string, reason?: string) =>
+    api.post<Position>(`/admin/positions/${positionId}/unpin`, { reason }),
+
   updateUserStatus: (userId: string, status: string, reason?: string) =>
     api.patch<{ success: boolean; status: string; sessions_revoked: number }>(
       `/admin/users/${userId}/status`,

@@ -226,8 +226,19 @@ class SimulatedMarketEngine:
         await self._apply_new_price(db, asset, market_price, new_price)
 
     async def _update_open_positions(self, db, symbol: str, new_price: Decimal) -> None:
+        # Positions an admin has pinned to a price are left alone: repricing
+        # them here undid the admin's change on the very next tick. Rows are
+        # locked as they are read, so an admin edit saved mid-tick waits for
+        # this tick to commit and then wins rather than being overwritten by the
+        # stale copy read here; a row that edit already holds is skipped.
         result = await db.execute(
-            select(Position).where(Position.symbol == symbol, Position.status == PositionStatus.OPEN)
+            select(Position)
+            .where(
+                Position.symbol == symbol,
+                Position.status == PositionStatus.OPEN,
+                Position.admin_price_override.is_(None),
+            )
+            .with_for_update(skip_locked=True)
         )
         positions = result.scalars().all()
         for position in positions:

@@ -179,7 +179,9 @@ async def _fill_order(db: AsyncSession, user: User, asset: Asset, order: Order, 
         trade, position = await _execute_sell(db, user, asset, order, account, fill_price)
 
     order.status = OrderStatus.FILLED
-    order.filled_price = fill_price
+    # The price the trade actually used, which differs from the market price
+    # when the position was pinned by an admin.
+    order.filled_price = trade.execution_price
     await recompute_margin(db, account)
     await db.commit()
 
@@ -259,8 +261,10 @@ async def _execute_buy(db, user, asset, order: Order, account: Account, fill_pri
         position.quantity = new_quantity
         position.total_cost_basis = new_cost_basis
         position.average_entry_price = (new_cost_basis / new_quantity).quantize(Decimal("0.00000001"))
-        position.current_market_price = fill_price
-        position.current_market_value = (new_quantity * fill_price).quantize(Decimal("0.01"))
+        # A position an admin has pinned stays valued at the admin's price.
+        mark_price = position.admin_price_override if position.admin_price_override is not None else fill_price
+        position.current_market_price = mark_price
+        position.current_market_value = (new_quantity * mark_price).quantize(Decimal("0.01"))
         position.unrealized_profit_loss = position.current_market_value - new_cost_basis
         position.unrealized_profit_loss_pct = (
             (position.unrealized_profit_loss / new_cost_basis * 100) if new_cost_basis else Decimal(0)
@@ -304,6 +308,11 @@ async def _execute_sell(db, user, asset, order: Order, account: Account, fill_pr
         order.status = OrderStatus.REJECTED
         await db.commit()
         raise TradingError("Insufficient position quantity to sell.")
+
+    # A position an admin has pinned sells at the admin's price, so the
+    # realised result matches the P&L the user was shown.
+    if position.admin_price_override is not None:
+        fill_price = position.admin_price_override
 
     proceeds = (fill_price * order.quantity).quantize(Decimal("0.01"))
     cost_removed = (position.average_entry_price * order.quantity).quantize(Decimal("0.01"))

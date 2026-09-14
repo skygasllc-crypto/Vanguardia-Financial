@@ -84,6 +84,8 @@ class PositionOut(BaseModel):
     current_market_value: Decimal
     unrealized_profit_loss: Decimal
     unrealized_profit_loss_pct: Decimal
+    #: Price an admin pinned the position to; null when it follows the market.
+    admin_price_override: Decimal | None = None
     account_id: uuid.UUID | None = None
     margin_reserved: Decimal = Decimal(0)
     leverage: int = 1

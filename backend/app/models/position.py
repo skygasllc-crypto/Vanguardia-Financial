@@ -46,6 +46,10 @@ class Position(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     current_market_value: Mapped[Decimal] = mapped_column(Numeric(24, 8), nullable=False)
     unrealized_profit_loss: Mapped[Decimal] = mapped_column(Numeric(24, 8), nullable=False, default=0)
     unrealized_profit_loss_pct: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=False, default=0)
+    #: Price an admin has pinned this position to. While set, the market engine
+    #: does not reprice the position, so its P&L stays at the admin's figure,
+    #: and closing or selling it fills at this price.
+    admin_price_override: Mapped[Decimal | None] = mapped_column(Numeric(24, 8), nullable=True)
 
     # Protective exits inherited from the opening order. Stored on the position
     # so the closed-position history can show the brackets the trade was run

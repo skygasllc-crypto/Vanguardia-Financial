@@ -21,6 +21,9 @@ export function PositionManipulationControls({ position, onManipulated }: Positi
   const [pnlPct, setPnlPct] = useState(String(position.unrealized_profit_loss_pct))
   const [reason, setReason] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isUnpinning, setIsUnpinning] = useState(false)
+  // A P&L or price edit pins the position; it ignores the market until unpinned.
+  const isPinned = position.admin_price_override != null
 
   function openModal() {
     setPnlAmount(String(position.unrealized_profit_loss))
@@ -55,16 +58,36 @@ export function PositionManipulationControls({ position, onManipulated }: Positi
     }
   }
 
+  async function unpin() {
+    setIsUnpinning(true)
+    try {
+      await adminService.unpinPosition(position.id)
+      toast.success(`${position.symbol} position unpinned. It follows the market again.`)
+      onManipulated?.()
+    } catch {
+      toast.error('Failed to unpin position.')
+    } finally {
+      setIsUnpinning(false)
+    }
+  }
+
   return (
     <>
-      <Button
-        size="sm"
-        variant="secondary"
-        onClick={openModal}
-        className="bg-blue-50 text-blue-700 hover:bg-blue-100"
-      >
-        Edit P&L
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={openModal}
+          className="bg-blue-50 text-blue-700 hover:bg-blue-100"
+        >
+          Edit P&L
+        </Button>
+        {isPinned && (
+          <Button size="sm" variant="secondary" onClick={unpin} isLoading={isUnpinning}>
+            Unpin
+          </Button>
+        )}
+      </div>
 
       <Modal
         isOpen={modalOpen}

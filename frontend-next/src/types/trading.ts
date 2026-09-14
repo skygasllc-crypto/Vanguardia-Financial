@@ -43,6 +43,8 @@ export interface Position {
   current_market_value: string
   unrealized_profit_loss: string
   unrealized_profit_loss_pct: string
+  /** Price an admin pinned this position to; null when it follows the market. */
+  admin_price_override?: string | null
   take_profit_price: string | null
   stop_loss_price: string | null
   /** The account this position belongs to. */

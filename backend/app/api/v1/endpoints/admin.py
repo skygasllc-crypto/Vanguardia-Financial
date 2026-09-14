@@ -39,6 +39,7 @@ from app.services.admin_trading_service import (
     admin_force_loss,
     admin_force_profit,
     admin_set_position_price,
+    admin_unpin_position,
 )
 from app.services.trading_service import get_or_create_account
 
@@ -378,6 +379,11 @@ class SetPriceRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=500, description="Reason for price change")
 
 
+class UnpinRequest(BaseModel):
+    """Request schema for releasing a pinned position back to the market."""
+    reason: str | None = Field(default=None, max_length=500, description="Reason for unpinning")
+
+
 @router.post("/positions/{position_id}/force-profit", response_model=PositionOut)
 async def force_position_profit(
     position_id: str,
@@ -472,6 +478,33 @@ async def set_position_price(
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             detail={"error": {"code": "MANIPULATION_FAILED", "message": str(exc)}}
+        )
+
+
+@router.post("/positions/{position_id}/unpin", response_model=PositionOut)
+async def unpin_position(
+    position_id: str,
+    payload: UnpinRequest | None = None,
+    admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Release a position pinned by an admin P&L or price edit.
+
+    The position is repriced at the current market price immediately and
+    follows the market again from then on. The user sees the update in
+    real-time via WebSocket.
+    """
+    try:
+        return await admin_unpin_position(
+            db,
+            admin,
+            uuid.UUID(position_id),
+            payload.reason if payload else None,
+        )
+    except AdminTradingError as exc:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail={"error": {"code": "UNPIN_FAILED", "message": str(exc)}}
         )
 
 @router.get("/users/{user_id}/accounts", response_model=list[AccountOut])
