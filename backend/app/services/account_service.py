@@ -234,10 +234,17 @@ async def account_metrics(db: AsyncSession, account: Account) -> dict:
         select(
             func.coalesce(func.sum(Position.unrealized_profit_loss), 0),
             func.count(),
+            func.coalesce(func.sum(Position.total_cost_basis), 0),
         ).where(Position.account_id == account.id, Position.status == PositionStatus.OPEN)
     )).first()
     unrealized = Decimal(str(rows[0] or 0))
     open_count = int(rows[1] or 0)
+    # Opening a position debits its cost from `available_balance`, so that cash
+    # is still the user's — it is sitting in the position. Leaving it out made
+    # equity fall by the full cost the moment a trade opened and only recover
+    # on close, so an open trade's profit or loss never showed in equity or in
+    # the day's P&L until it was realised.
+    in_positions = Decimal(str(rows[2] or 0))
 
     realized = Decimal(str((await db.execute(
         select(func.coalesce(func.sum(Position.realized_profit_loss), 0)).where(
@@ -252,7 +259,7 @@ async def account_metrics(db: AsyncSession, account: Account) -> dict:
     # withdrawal that may yet be rejected. `withdrawable` below is the figure
     # that is meant to exclude them.
     balance = (Decimal(account.available_balance) + Decimal(account.locked_balance)).quantize(Decimal("0.01"))
-    equity = (balance + unrealized).quantize(Decimal("0.01"))
+    equity = (balance + in_positions + unrealized).quantize(Decimal("0.01"))
     margin_used = Decimal(account.margin_used)
     free_margin = (equity - margin_used).quantize(Decimal("0.01"))
     # Undefined with nothing open; reported as None rather than as infinity or

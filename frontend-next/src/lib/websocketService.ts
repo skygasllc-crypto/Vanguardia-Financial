@@ -13,11 +13,13 @@ interface WsEnvelope {
 }
 
 const RECONNECT_DELAY_MS = 2500
+const SUMMARY_REFRESH_DELAY_MS = 400
 
 class WebSocketService {
   private socket: WebSocket | null = null
   private token: string | null = null
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  private refreshTimer: ReturnType<typeof setTimeout> | null = null
   private manuallyClosed = false
 
   connect(token: string): void {
@@ -29,6 +31,8 @@ class WebSocketService {
   disconnect(): void {
     this.manuallyClosed = true
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+    if (this.refreshTimer) clearTimeout(this.refreshTimer)
+    this.refreshTimer = null
     this.socket?.close()
     this.socket = null
     useWsStore.getState().setStatus('disconnected')
@@ -87,7 +91,7 @@ class WebSocketService {
       case 'position.updated':
       case 'position.profit_loss_updated':
         usePositionsStore.getState().upsertPosition(payload as unknown as Partial<Position> & { id: string })
-        usePortfolioStore.getState().fetchPortfolio().catch(() => undefined)
+        this.scheduleSummaryRefresh()
         break
       case 'position.closed':
         // Mark it closed in place. Removing the row here was why a position
@@ -95,7 +99,7 @@ class WebSocketService {
         // manual reload: this client dropped it from the list instead of
         // reflecting the new state, and nothing re-rendered it as closed.
         usePositionsStore.getState().markClosed(payload as unknown as Partial<Position> & { id: string })
-        usePortfolioStore.getState().fetchPortfolio().catch(() => undefined)
+        this.scheduleSummaryRefresh()
         break
       case 'order.updated':
         // Orders and executions on another account (the demo one while the
@@ -112,16 +116,35 @@ class WebSocketService {
         useAccountStore.getState().fetchWallet().catch(() => undefined)
         break
       case 'portfolio.updated':
+        this.scheduleSummaryRefresh()
+        break
       case 'admin.portfolio_updated':
       case 'admin.account_updated':
       case 'admin.position_updated':
       case 'admin.account_adjusted':
-        usePortfolioStore.getState().fetchPortfolio().catch(() => undefined)
+        this.scheduleSummaryRefresh()
         usePositionsStore.getState().fetchPositions().catch(() => undefined)
         break
       default:
         break
     }
+  }
+
+  /** Refresh the account-level figures (portfolio summary, account equity and
+   * P&L) that are derived from open positions.
+   *
+   * A single price tick publishes one update per open position plus a
+   * portfolio event for each, so refreshing per message fired a burst of
+   * identical requests. They are coalesced into one. Accounts are included
+   * because the account switcher and account cards otherwise keep the equity
+   * and P&L from page load while the trade moves. */
+  private scheduleSummaryRefresh(): void {
+    if (this.refreshTimer) return
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = null
+      usePortfolioStore.getState().fetchPortfolio().catch(() => undefined)
+      useAccountsStore.getState().fetchAccounts().catch(() => undefined)
+    }, SUMMARY_REFRESH_DELAY_MS)
   }
 }
 

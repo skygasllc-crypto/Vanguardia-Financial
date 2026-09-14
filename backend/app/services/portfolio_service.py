@@ -90,8 +90,10 @@ async def _build_engine_summary(
     # Held funds are still the user's, so equity counts them — matching
     # `account_metrics`, which is what wrote the snapshot being compared
     # against. Leaving `locked_balance` out here would read a withdrawal
-    # request as an instant loss.
-    current_equity = account.available_balance + account.locked_balance + total_unrealized
+    # request as an instant loss. The cost of open positions is counted for
+    # the same reason: it was debited from the balance on open, and without it
+    # an open trade read as a loss of its whole cost until it was closed.
+    current_equity = account.available_balance + account.locked_balance + total_invested + total_unrealized
 
     if opening_row is not None and Decimal(str(opening_row[0])) > 0:
         opening = Decimal(str(opening_row[0]))
@@ -118,9 +120,20 @@ async def _build_engine_summary(
         daily_pl = (current_equity - opening - external).quantize(Decimal("0.01"))
         daily_pl_pct = (daily_pl / opening * 100).quantize(Decimal("0.01"))
     else:
-        # No snapshot yet — say nothing rather than invent a number.
-        daily_pl = Decimal(0)
-        daily_pl_pct = Decimal(0)
+        # No snapshot yet (a new account, or one that has not traded in the
+        # last day). Reporting zero here hid a live trade's result until the
+        # first snapshot landed, so the day's result is built directly from
+        # the positions instead: what is open now, plus what closed today.
+        realized_today = Decimal(str((await db.execute(
+            select(func.coalesce(func.sum(Position.realized_profit_loss), 0)).where(
+                Position.account_id == account.id,
+                Position.status == PositionStatus.CLOSED,
+                Position.closed_at >= since,
+            )
+        )).scalar() or 0))
+        daily_pl = (total_unrealized + realized_today).quantize(Decimal("0.01"))
+        opening = current_equity - daily_pl
+        daily_pl_pct = (daily_pl / opening * 100).quantize(Decimal("0.01")) if opening > 0 else Decimal(0)
 
     allocation: list[AllocationSlice] = []
     if value_of_crypto > 0:
