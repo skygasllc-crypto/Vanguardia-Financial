@@ -77,12 +77,56 @@ services:
         value: https://api.vanguardiafinancial.com
       - key: NEXT_PUBLIC_SITE_URL
         value: https://vanguardiafinancial.com
+    # Static export writes each page as `<route>.html` (e.g. app/dashboard.html),
+    # but the app links to clean URLs like /app/dashboard. Render only applies
+    # a rewrite when no file exists at the requested path, so each clean URL
+    # needs mapping to its own .html file — otherwise a browser refresh on
+    # that page finds nothing.
+    #
+    # Do NOT replace these with a catch-all `/* -> /index.html`. That serves
+    # the homepage for every refresh, which bounces logged-in users out of the
+    # app. Unknown paths should fall through to 404.html instead.
+    #
+    # Adding a page under src/app? Add its rewrite here too, or refreshing it
+    # will 404.
     routes:
-      # Static export writes real .html files; this lets client-side routes
-      # resolve rather than 404 on refresh.
-      - type: rewrite
-        source: /*
-        destination: /index.html
+      - { type: rewrite, source: /about, destination: /about.html }
+      - { type: rewrite, source: /admin, destination: /admin.html }
+      - { type: rewrite, source: /admin/audit-logs, destination: /admin/audit-logs.html }
+      - { type: rewrite, source: /admin/dashboard, destination: /admin/dashboard.html }
+      - { type: rewrite, source: /admin/deposits, destination: /admin/deposits.html }
+      - { type: rewrite, source: /admin/positions, destination: /admin/positions.html }
+      - { type: rewrite, source: /admin/users, destination: /admin/users.html }
+      - { type: rewrite, source: /admin/users/detail, destination: /admin/users/detail.html }
+      - { type: rewrite, source: /admin/withdrawals, destination: /admin/withdrawals.html }
+      - { type: rewrite, source: /app, destination: /app.html }
+      - { type: rewrite, source: /app/accounts, destination: /app/accounts.html }
+      - { type: rewrite, source: /app/dashboard, destination: /app/dashboard.html }
+      - { type: rewrite, source: /app/markets, destination: /app/markets.html }
+      - { type: rewrite, source: /app/markets/asset, destination: /app/markets/asset.html }
+      - { type: rewrite, source: /app/portfolio, destination: /app/portfolio.html }
+      - { type: rewrite, source: /app/profile, destination: /app/profile.html }
+      - { type: rewrite, source: /app/security, destination: /app/security.html }
+      - { type: rewrite, source: /app/trade, destination: /app/trade.html }
+      - { type: rewrite, source: /app/wallet, destination: /app/wallet.html }
+      - { type: rewrite, source: /app/wallet/add-funds, destination: /app/wallet/add-funds.html }
+      - { type: rewrite, source: /app/watchlist, destination: /app/watchlist.html }
+      - { type: rewrite, source: /faq, destination: /faq.html }
+      - { type: rewrite, source: /investments, destination: /investments.html }
+      - { type: rewrite, source: /investments/cds, destination: /investments/cds.html }
+      - { type: rewrite, source: /investments/etfs, destination: /investments/etfs.html }
+      - { type: rewrite, source: /investments/money-market, destination: /investments/money-market.html }
+      - { type: rewrite, source: /investments/mutual-funds, destination: /investments/mutual-funds.html }
+      - { type: rewrite, source: /investments/stocks, destination: /investments/stocks.html }
+      - { type: rewrite, source: /learn, destination: /learn.html }
+      - { type: rewrite, source: /login, destination: /login.html }
+      - { type: rewrite, source: /markets, destination: /markets.html }
+      - { type: rewrite, source: /markets/asset, destination: /markets/asset.html }
+      - { type: rewrite, source: /privacy, destination: /privacy.html }
+      - { type: rewrite, source: /register, destination: /register.html }
+      - { type: rewrite, source: /risk-disclosure, destination: /risk-disclosure.html }
+      - { type: rewrite, source: /security-overview, destination: /security-overview.html }
+      - { type: rewrite, source: /terms, destination: /terms.html }
     headers:
       - path: /*
         name: X-Content-Type-Options

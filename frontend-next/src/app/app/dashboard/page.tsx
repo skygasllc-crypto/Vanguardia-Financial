@@ -62,7 +62,7 @@ export default function DashboardPage() {
     fetchPortfolio(accountType, activeAccountId ?? undefined).catch(() => undefined)
   }, [accountType, activeAccountId, fetchPortfolio])
 
-  const history = useMemo(() => buildSyntheticHistory(Number(summary?.total_portfolio_value ?? 100000)), [summary?.total_portfolio_value, range])
+  const history = useMemo(() => buildSyntheticHistory(Number(summary?.total_portfolio_value ?? 0)), [summary?.total_portfolio_value, range])
 
   const topMovers = useMemo(
     () => Object.values(assets).sort((a, b) => Math.abs(Number(b.change_24h_pct)) - Math.abs(Number(a.change_24h_pct))).slice(0, 5),

@@ -38,7 +38,7 @@ export function RegisterForm() {
   return (
     <div>
       <h1 className="font-display text-2xl font-bold text-navy-900">Create your account</h1>
-      <p className="mt-2 text-sm text-slate-500">Start with a $100,000 balance — free.</p>
+      <p className="mt-2 text-sm text-slate-500">Open your account in minutes.</p>
 
       <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
         <Input label="Full name" required value={form.full_name} onChange={update('full_name')} autoComplete="name" />

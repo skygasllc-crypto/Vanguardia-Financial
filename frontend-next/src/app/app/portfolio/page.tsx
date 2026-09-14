@@ -38,7 +38,7 @@ export default function PortfolioPage() {
     fetchTransactions().catch(() => undefined)
   }, [fetchTransactions])
 
-  const history = useMemo(() => buildSyntheticHistory(Number(summary?.total_portfolio_value ?? 100000)), [summary?.total_portfolio_value, range])
+  const history = useMemo(() => buildSyntheticHistory(Number(summary?.total_portfolio_value ?? 0)), [summary?.total_portfolio_value, range])
 
   if (!summary) {
     return (

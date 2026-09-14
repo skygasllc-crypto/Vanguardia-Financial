@@ -260,7 +260,7 @@ export default function AccountsPage() {
                 >
                   <span className="block text-sm font-semibold capitalize text-navy-900">{t}</span>
                   <span className="block text-xs text-slate-500">
-                    {t === 'demo' ? 'Funded with practice balance' : 'Funded by deposit'}
+                    {t === 'demo' ? 'Practice account, opens at $0' : 'Funded by deposit'}
                   </span>
                 </button>
               ))}

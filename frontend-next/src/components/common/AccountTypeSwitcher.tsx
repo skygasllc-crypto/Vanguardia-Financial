@@ -20,7 +20,6 @@ export function AccountTypeSwitcher() {
       >
         <span className="mr-2">📊</span>
         DEMO
-        <span className="ml-2 text-xs opacity-75">($100k)</span>
       </button>
       <button
         onClick={() => setAccountType('real')}

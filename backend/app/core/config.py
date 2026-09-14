@@ -67,7 +67,8 @@ class Settings(BaseSettings):
     MARKET_VOLATILITY_LEVEL: str = "medium"
 
     # Paper trading
-    STARTING_PAPER_BALANCE: float = 100000.0
+    # New demo accounts open empty; no free practice balance is credited.
+    STARTING_PAPER_BALANCE: float = 0.0
     DEFAULT_ACCOUNT_CURRENCY: str = "USD"
 
     # Email
