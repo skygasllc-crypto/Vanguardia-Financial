@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,15 +18,18 @@ router = APIRouter()
 @router.get("", response_model=list[TradeOut])
 async def list_trades(
     account_type: str | None = Query(default=None, pattern="^(demo|real)$"),
+    account_id: uuid.UUID | None = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Executions for the requested book. A Trade carries no account type of
-    its own — it inherits the one on the position it belongs to, so the filter
-    joins through it."""
+    """Executions for the requested account or book. A Trade carries no
+    account of its own — it inherits the one on the position it belongs to, so
+    both filters join through it."""
     query = select(Trade).where(Trade.user_id == user.id)
+    if account_id or account_type:
+        query = query.join(Position, Position.id == Trade.position_id)
+    if account_id:
+        query = query.where(Position.account_id == account_id)
     if account_type:
-        query = query.join(Position, Position.id == Trade.position_id).where(
-            Position.account_type == AccountType(account_type)
-        )
+        query = query.where(Position.account_type == AccountType(account_type))
     return (await db.execute(query.order_by(Trade.executed_at.desc()))).scalars().all()

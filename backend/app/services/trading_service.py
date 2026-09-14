@@ -114,7 +114,10 @@ async def place_order(db: AsyncSession, user: User, payload: OrderCreate) -> tup
         side=payload.side,
         order_type=payload.order_type,
         quantity=payload.quantity,
-        account_type=payload.account_type,
+        # From the resolved account, never the payload: a client can send a
+        # type that disagrees with the account it names, which filed the order
+        # (and the position it opened) under the other book.
+        account_type=target.account_type,
         account_id=target.id,
         price=payload.price,
         stop_price=payload.stop_price,
@@ -181,13 +184,16 @@ async def _fill_order(db: AsyncSession, user: User, asset: Asset, order: Order, 
     await db.commit()
 
     await publish_to_user(user.id, WSEvent.ORDER_UPDATED, _order_payload(order))
-    await publish_to_user(user.id, WSEvent.TRADE_EXECUTED, _trade_payload(trade))
+    # A Trade row has no account of its own; name it so a client showing a
+    # different account can ignore the event.
+    await publish_to_user(user.id, WSEvent.TRADE_EXECUTED, {**_trade_payload(trade), "account_id": str(account.id)})
     if position is not None:
         await publish_to_user(user.id, WSEvent.POSITION_UPDATED, _position_payload(position))
     await publish_to_user(user.id, WSEvent.ACCOUNT_BALANCE_UPDATED, {
         "available_balance": str(account.available_balance),
         "locked_balance": str(account.locked_balance),
         "currency": account.currency,
+        "account_id": str(account.id),
     })
     await publish_to_user(user.id, WSEvent.PORTFOLIO_UPDATED, {"reason": "trade_executed"})
 
@@ -212,13 +218,14 @@ async def _execute_buy(db, user, asset, order: Order, account: Account, fill_pri
             f"{account.currency} at 1:{account.leverage}; {metrics['free_margin']} is available."
         )
 
-    # Scoped to the order's book: without this a real-account buy would merge
-    # into an open demo position in the same symbol.
+    # Scoped to the account the order fills on. Matching by account type
+    # merged a buy into an open position on a different account of the same
+    # type, and into the other book whenever the order's type was wrong.
     result = await db.execute(
         select(Position).where(
             Position.user_id == user.id,
             Position.symbol == asset.symbol,
-            Position.account_type == order.account_type,
+            Position.account_id == account.id,
             Position.status == PositionStatus.OPEN,
         )
     )
@@ -229,7 +236,7 @@ async def _execute_buy(db, user, asset, order: Order, account: Account, fill_pri
             user_id=user.id,
             asset_id=asset.id,
             symbol=asset.symbol,
-            account_type=order.account_type,
+            account_type=account.account_type,
             quantity=order.quantity,
             average_entry_price=fill_price,
             total_cost_basis=total_cost,
@@ -288,7 +295,7 @@ async def _execute_sell(db, user, asset, order: Order, account: Account, fill_pr
         select(Position).where(
             Position.user_id == user.id,
             Position.symbol == asset.symbol,
-            Position.account_type == order.account_type,
+            Position.account_id == account.id,
             Position.status == PositionStatus.OPEN,
         )
     )
@@ -429,6 +436,7 @@ def _order_payload(order: Order) -> dict:
         "take_profit_price": str(order.take_profit_price) if order.take_profit_price else None,
         "stop_loss_price": str(order.stop_loss_price) if order.stop_loss_price else None,
         "status": order.status.value,
+        "account_id": str(order.account_id) if order.account_id else None,
     }
 
 
@@ -444,6 +452,7 @@ def _trade_payload(trade: Trade) -> dict:
 def _position_payload(position: Position) -> dict:
     return {
         "id": str(position.id), "symbol": position.symbol, "quantity": str(position.quantity),
+        "account_id": str(position.account_id) if position.account_id else None,
         "average_entry_price": str(position.average_entry_price),
         "current_market_price": str(position.current_market_price),
         "current_market_value": str(position.current_market_value),

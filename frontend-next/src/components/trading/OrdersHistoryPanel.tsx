@@ -6,7 +6,7 @@ import { Badge } from '@/components/common/Badge'
 import { Button } from '@/components/common/Button'
 import { EmptyState } from '@/components/common/EmptyState'
 import { PnLText } from '@/components/common/PnLText'
-import { useAccountTypeStore } from '@/store/accountTypeStore'
+import { useAccountsStore } from '@/store/accountsStore'
 import { useOrdersStore } from '@/store/ordersStore'
 import { usePositionsStore } from '@/store/positionsStore'
 import { toast } from '@/store/toastStore'
@@ -27,16 +27,17 @@ export function OrdersHistoryPanel() {
   const cancelOrder = useOrdersStore((s) => s.cancelOrder)
   const positions = usePositionsStore((s) => s.positions)
   const fetchPositions = usePositionsStore((s) => s.fetchPositions)
-  const accountType = useAccountTypeStore((s) => s.accountType)
+  const activeAccountId = useAccountsStore((s) => s.activeAccountId)
   const [tab, setTab] = useState<(typeof TABS)[number]>('Open Orders')
 
-  // Re-reads on every account switch: demo and real are separate books, and
+  // Re-reads on every account switch: each account is a separate book, and
   // leaving the previous one on screen misreports what the user holds.
   useEffect(() => {
-    fetchOrders(accountType).catch(() => undefined)
-    fetchTrades(accountType).catch(() => undefined)
-    fetchPositions(accountType).catch(() => undefined)
-  }, [accountType, fetchOrders, fetchTrades, fetchPositions])
+    if (!activeAccountId) return
+    fetchOrders().catch(() => undefined)
+    fetchTrades().catch(() => undefined)
+    fetchPositions().catch(() => undefined)
+  }, [activeAccountId, fetchOrders, fetchTrades, fetchPositions])
 
   // Order history is reported per position rather than per order: a "trade"
   // as a user thinks of it has an entry, an exit and a result, and an order

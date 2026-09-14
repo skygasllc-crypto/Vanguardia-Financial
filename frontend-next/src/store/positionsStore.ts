@@ -1,13 +1,14 @@
 import { create } from 'zustand'
 
 import { api } from '@/lib/apiClient'
-import { useAccountTypeStore } from '@/store/accountTypeStore'
-import type { AccountType, Position } from '@/types/trading'
+import { activeAccountQuery } from '@/store/accountsStore'
+import type { Position } from '@/types/trading'
 
 interface PositionsState {
   positions: Position[]
   isLoading: boolean
-  fetchPositions: (accountType?: AccountType) => Promise<void>
+  /** Positions on the selected account. */
+  fetchPositions: () => Promise<void>
   closePosition: (positionId: string) => Promise<void>
   upsertPosition: (position: Partial<Position> & { id: string }) => void
   /** Mark a position closed in place. */
@@ -25,17 +26,13 @@ export const usePositionsStore = create<PositionsState>((set, get) => ({
   positions: [],
   isLoading: false,
 
-  fetchPositions: async (accountType) => {
-    // Defaults to whichever book the user is currently on, so callers that
-    // don't thread it through (the app shell's initial load, websocket-driven
-    // refreshes) still read the right one instead of both interleaved.
-    const book = accountType ?? useAccountTypeStore.getState().accountType
+  fetchPositions: async () => {
     set({ isLoading: true })
     try {
       // No status filter: the panel needs both the live book and the recently
-      // closed trades that feed the history tab. Scoped to one account though —
-      // demo and real are separate books and must not be shown interleaved.
-      const positions = await api.get<Position[]>(`/positions?account_type=${book}`)
+      // closed trades that feed the history tab. Scoped to the selected
+      // account though — demo and real accounts must not be shown interleaved.
+      const positions = await api.get<Position[]>(`/positions?${activeAccountQuery()}`)
       set({ positions, isLoading: false })
     } catch (err) {
       set({ isLoading: false })

@@ -45,6 +45,9 @@ class AdminUserFinancialProfile(BaseModel):
 
 class BalanceAdjustmentRequest(BaseModel):
     adjustment_type: AdjustmentType
+    # The account to adjust — any of the user's accounts, demo included.
+    # Omitted, the adjustment goes to the user's real account.
+    account_id: uuid.UUID | None = None
     amount: Decimal = Field(gt=0)
     currency: str = "USD"
     reason: str = Field(min_length=3, max_length=500)

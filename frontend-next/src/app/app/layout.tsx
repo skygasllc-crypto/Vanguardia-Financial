@@ -8,6 +8,7 @@ import { Sidebar } from '@/components/layout/Sidebar'
 import { Topbar } from '@/components/layout/Topbar'
 import { useWebSocketLifecycle } from '@/hooks/useWebSocketLifecycle'
 import { useAccountStore } from '@/store/accountStore'
+import { useAccountsStore } from '@/store/accountsStore'
 import { useAuthStore } from '@/store/authStore'
 import { usePortfolioStore } from '@/store/portfolioStore'
 import { usePositionsStore } from '@/store/positionsStore'
@@ -43,15 +44,26 @@ export default function AppShellLayout({ children }: { children: React.ReactNode
   const fetchPositions = usePositionsStore((s) => s.fetchPositions)
   const fetchWallet = useAccountStore((s) => s.fetchWallet)
   const fetchWatchlist = useWatchlistStore((s) => s.fetchWatchlist)
+  const fetchAccounts = useAccountsStore((s) => s.fetchAccounts)
+  const activeAccountId = useAccountsStore((s) => s.activeAccountId)
 
   useEffect(() => {
     if (!isAuthenticated) return
-    fetchPortfolio().catch(() => undefined)
-    fetchPositions().catch(() => undefined)
-    fetchWallet().catch(() => undefined)
+    fetchAccounts().catch(() => undefined)
     fetchWatchlist().catch(() => undefined)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated])
+
+  // Reloaded whenever the selected account changes: each account, demo or
+  // real, has its own portfolio, and the previous one must not stay on screen.
+  // Waits for the account list so the first load isn't the wrong account.
+  useEffect(() => {
+    if (!isAuthenticated || !activeAccountId) return
+    fetchPortfolio().catch(() => undefined)
+    fetchPositions().catch(() => undefined)
+    fetchWallet().catch(() => undefined)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, activeAccountId])
 
   useEffect(() => {
     if (!isInitializing && !isAuthenticated) {

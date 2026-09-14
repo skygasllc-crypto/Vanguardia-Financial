@@ -10,6 +10,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { StatCard } from '@/components/common/StatCard'
 import { usePositionsStore } from '@/store/positionsStore'
 import { useAccountStore } from '@/store/accountStore'
+import { useAccountsStore } from '@/store/accountsStore'
 import { formatCurrency, formatDateTime, formatNumber } from '@/lib/format'
 
 export default function WalletPage() {
@@ -17,10 +18,12 @@ export default function WalletPage() {
   const transactions = useAccountStore((s) => s.transactions)
   const fetchTransactions = useAccountStore((s) => s.fetchTransactions)
   const positions = usePositionsStore((s) => s.positions)
+  const activeAccountId = useAccountsStore((s) => s.activeAccountId)
 
+  // Reloads on an account switch so the ledger is the selected account's.
   useEffect(() => {
-    fetchTransactions().catch(() => undefined)
-  }, [fetchTransactions])
+    if (activeAccountId) fetchTransactions().catch(() => undefined)
+  }, [activeAccountId, fetchTransactions])
 
   return (
     <div className="space-y-6">

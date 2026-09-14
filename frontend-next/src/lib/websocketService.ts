@@ -1,4 +1,5 @@
 import { useAccountStore } from '@/store/accountStore'
+import { useAccountsStore } from '@/store/accountsStore'
 import { useMarketStore } from '@/store/marketStore'
 import { useOrdersStore } from '@/store/ordersStore'
 import { usePortfolioStore } from '@/store/portfolioStore'
@@ -97,13 +98,18 @@ class WebSocketService {
         usePortfolioStore.getState().fetchPortfolio().catch(() => undefined)
         break
       case 'order.updated':
-        useOrdersStore.getState().upsertOrder(payload as unknown as Order)
+        // Orders and executions on another account (the demo one while the
+        // user is on real, say) belong to that account's lists, not this one.
+        if (!isForOtherAccount(payload)) useOrdersStore.getState().upsertOrder(payload as unknown as Order)
         break
       case 'trade.executed':
-        useOrdersStore.getState().addTrade(payload as unknown as Trade)
+        if (!isForOtherAccount(payload)) useOrdersStore.getState().addTrade(payload as unknown as Trade)
         break
       case 'account.balance_updated':
-        useAccountStore.getState().applyBalanceUpdate(payload as never)
+        // May be for an account the user isn't viewing (a demo trade, an admin
+        // funding the demo account). Merging it would show that balance on the
+        // wrong account, so re-read the selected account's wallet instead.
+        useAccountStore.getState().fetchWallet().catch(() => undefined)
         break
       case 'portfolio.updated':
       case 'admin.portfolio_updated':
@@ -117,6 +123,14 @@ class WebSocketService {
         break
     }
   }
+}
+
+/** True when an event names an account other than the selected one. Events
+ * that name no account are applied as before. */
+function isForOtherAccount(payload: Record<string, unknown>): boolean {
+  const accountId = payload.account_id
+  const activeAccountId = useAccountsStore.getState().activeAccountId
+  return typeof accountId === 'string' && activeAccountId !== null && accountId !== activeAccountId
 }
 
 export const websocketService = new WebSocketService()

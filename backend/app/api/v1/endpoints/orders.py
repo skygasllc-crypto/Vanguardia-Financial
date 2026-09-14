@@ -19,13 +19,16 @@ router = APIRouter()
 @router.get("", response_model=list[OrderOut])
 async def list_orders(
     account_type: str | None = Query(default=None, pattern="^(demo|real)$"),
+    account_id: uuid.UUID | None = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Orders for the requested book. Omitting the filter returns both, which
-    is only right for an audit view — the trading UI always passes the account
-    the user is currently on, or a real account would list demo orders."""
+    """Orders for the requested account or book. Omitting both filters returns
+    everything, which is only right for an audit view — the trading UI always
+    passes the account the user is currently on."""
     query = select(Order).where(Order.user_id == user.id)
+    if account_id:
+        query = query.where(Order.account_id == account_id)
     if account_type:
         query = query.where(Order.account_type == AccountType(account_type))
     return (await db.execute(query.order_by(Order.created_at.desc()))).scalars().all()

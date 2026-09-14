@@ -1,23 +1,61 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useId, useState } from 'react'
 
 import { Button } from '@/components/common/Button'
 import { Input } from '@/components/common/Input'
 import { adminService } from '@/lib/adminService'
+import { ApiError } from '@/lib/apiClient'
 import { toast } from '@/store/toastStore'
 import { formatCurrency } from '@/lib/format'
+import type { TradingAccount } from '@/types/account'
+
+function accountLabel(account: TradingAccount): string {
+  const type = account.account_type === 'demo' ? 'Demo' : 'Real'
+  return `${account.account_number} · ${type} · ${formatCurrency(account.balance)}`
+}
 
 export function BalanceAdjustmentForm({ userId, onSaved }: { userId: string; onSaved: () => void }) {
   const [type, setType] = useState<'credit' | 'debit'>('credit')
+  const [accounts, setAccounts] = useState<TradingAccount[]>([])
+  const [accountId, setAccountId] = useState('')
   const [amount, setAmount] = useState('')
   const [reason, setReason] = useState('')
   const [internalReference, setInternalReference] = useState('')
   const [notes, setNotes] = useState('')
   const [step, setStep] = useState<'form' | 'confirm'>('form')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  // The user detail page renders this form twice (card and modal).
+  const accountSelectId = useId()
+
+  const loadAccounts = useCallback(() => {
+    adminService
+      .listUserAccounts(userId)
+      .then((list) => {
+        const active = list.filter((a) => a.is_active)
+        setAccounts(active)
+        // Default to the primary real account, which is where adjustments
+        // went before an account could be chosen.
+        const preferred =
+          active.find((a) => a.account_type === 'real' && a.is_primary) ??
+          active.find((a) => a.account_type === 'real') ??
+          active[0]
+        setAccountId((current) => (active.some((a) => a.id === current) ? current : preferred?.id ?? ''))
+      })
+      .catch(() => toast.error("Could not load this user's accounts."))
+  }, [userId])
+
+  useEffect(() => {
+    loadAccounts()
+  }, [loadAccounts])
+
+  const selectedAccount = accounts.find((a) => a.id === accountId)
 
   function proceedToConfirm() {
+    if (!selectedAccount) {
+      toast.error('Choose an account.')
+      return
+    }
     if (!amount || Number(amount) <= 0) {
       toast.error('Enter a valid amount.')
       return
@@ -34,8 +72,9 @@ export function BalanceAdjustmentForm({ userId, onSaved }: { userId: string; onS
     try {
       await adminService.adjustBalance(userId, {
         adjustment_type: type,
+        account_id: accountId,
         amount: Number(amount),
-        currency: 'USD',
+        currency: selectedAccount?.currency ?? 'USD',
         reason,
         internal_reference: internalReference || undefined,
         notes: notes || undefined,
@@ -46,9 +85,10 @@ export function BalanceAdjustmentForm({ userId, onSaved }: { userId: string; onS
       setInternalReference('')
       setNotes('')
       setStep('form')
+      loadAccounts()
       onSaved()
-    } catch {
-      toast.error('Could not apply balance adjustment.')
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not apply balance adjustment.')
     } finally {
       setIsSubmitting(false)
     }
@@ -59,11 +99,15 @@ export function BalanceAdjustmentForm({ userId, onSaved }: { userId: string; onS
       <div className="space-y-4">
         <div className="space-y-2 rounded-lg bg-slate-50 p-4 text-sm">
           <Row label="Adjustment Type" value={type === 'credit' ? 'Add Funds' : 'Subtract Funds'} />
+          {selectedAccount && <Row label="Account" value={accountLabel(selectedAccount)} />}
           <Row label="Amount" value={formatCurrency(amount)} />
           <Row label="Reason" value={reason} />
           {internalReference && <Row label="Internal Reference" value={internalReference} />}
         </div>
-        <p className="text-xs text-slate-500">This will create an immutable ledger entry and update the user's available balance immediately.</p>
+        <p className="text-xs text-slate-500">
+          This will create an immutable ledger entry and update the account&apos;s available balance immediately.
+          {selectedAccount?.account_type === 'demo' && ' Demo funds are practice money and cannot be withdrawn.'}
+        </p>
         <div className="flex gap-3">
           <Button variant="secondary" onClick={() => setStep('form')}>Back</Button>
           <Button onClick={submit} isLoading={isSubmitting}>Confirm Adjustment</Button>
@@ -87,6 +131,25 @@ export function BalanceAdjustmentForm({ userId, onSaved }: { userId: string; onS
         >
           Subtract Funds
         </button>
+      </div>
+      <div className="w-full">
+        <label htmlFor={accountSelectId} className="mb-1.5 block text-sm font-medium text-navy-800">
+          Account
+        </label>
+        <select
+          id={accountSelectId}
+          value={accountId}
+          onChange={(e) => setAccountId(e.target.value)}
+          disabled={accounts.length === 0}
+          className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-navy-900 transition-colors focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-100"
+        >
+          {accounts.length === 0 && <option value="">Loading accounts…</option>}
+          {accounts.map((a) => (
+            <option key={a.id} value={a.id}>
+              {accountLabel(a)}
+            </option>
+          ))}
+        </select>
       </div>
       <Input label="Amount (USD)" type="number" min="0" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} />
       <Input label="Reason" required value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Trading loss correction" />

@@ -11,6 +11,7 @@ import { PnLText } from '@/components/common/PnLText'
 import { Skeleton } from '@/components/common/Spinner'
 import { LivePositionsTable } from '@/components/trading/LivePositionsTable'
 import { useAccountStore } from '@/store/accountStore'
+import { useAccountsStore } from '@/store/accountsStore'
 import { usePortfolioStore } from '@/store/portfolioStore'
 import { formatCurrency, formatDateTime, formatPercent } from '@/lib/format'
 
@@ -32,11 +33,14 @@ export default function PortfolioPage() {
   const summary = usePortfolioStore((s) => s.summary)
   const transactions = useAccountStore((s) => s.transactions)
   const fetchTransactions = useAccountStore((s) => s.fetchTransactions)
+  const activeAccountId = useAccountsStore((s) => s.activeAccountId)
   const [range, setRange] = useState<(typeof RANGES)[number]>('1M')
 
+  // Reloads on an account switch so this page shows the selected account's
+  // activity, not the previous one's.
   useEffect(() => {
-    fetchTransactions().catch(() => undefined)
-  }, [fetchTransactions])
+    if (activeAccountId) fetchTransactions().catch(() => undefined)
+  }, [activeAccountId, fetchTransactions])
 
   const history = useMemo(() => buildSyntheticHistory(Number(summary?.total_portfolio_value ?? 0)), [summary?.total_portfolio_value, range])
 

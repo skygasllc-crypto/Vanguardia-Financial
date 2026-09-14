@@ -26,7 +26,7 @@ from app.models.user import User
 from app.models.user_financial_settings import UserFinancialSettings
 from app.schemas.admin import AdminPositionCreate, AdminPositionUpdate, AdminUserRow, BalanceAdjustmentRequest, UserFinancialSettingsUpdate
 from app.services.audit_service import record_audit
-from app.services.ledger_service import apply_ledger_transaction
+from app.services.ledger_service import InsufficientBalanceError, apply_ledger_transaction
 from app.services.trading_service import get_or_create_account
 from app.websocket.events import WSEvent
 from app.websocket.publisher import publish_to_user
@@ -109,15 +109,28 @@ async def adjust_user_balance(
     if target_user is None:
         raise AdminActionError("User not found.")
 
-    # Admin adjustments always go to REAL account, not DEMO
-    account = await get_or_create_account(db, user_id, "real")
+    if payload.account_id is not None:
+        # An explicit account, so an admin can fund a demo account or pick
+        # one of several accounts of the same type.
+        account = await db.get(Account, payload.account_id)
+        if account is None or account.user_id != user_id:
+            raise AdminActionError("Account not found for this user.")
+        if not account.is_active:
+            raise AdminActionError("This account is closed.")
+    else:
+        account = await get_or_create_account(db, user_id, "real")
+
     delta = payload.amount if payload.adjustment_type == AdjustmentType.CREDIT else -payload.amount
     transaction_type = TransactionType.ADMIN_CREDIT if payload.adjustment_type == AdjustmentType.CREDIT else TransactionType.ADMIN_DEBIT
 
-    ledger_entry = await apply_ledger_transaction(
-        db, account, transaction_type, delta,
-        reference_type="admin_adjustment", description=payload.reason,
-    )
+    try:
+        ledger_entry = await apply_ledger_transaction(
+            db, account, transaction_type, delta,
+            reference_type="admin_adjustment", description=payload.reason,
+        )
+    except InsufficientBalanceError as exc:
+        # Surfaced as a 400 with the reason, not an unhandled 500.
+        raise AdminActionError(str(exc)) from exc
 
     adjustment = AdminAdjustment(
         admin_id=admin.id, user_id=user_id, transaction_id=ledger_entry.id,
@@ -130,7 +143,10 @@ async def adjust_user_balance(
         db, actor_id=admin.id, actor_type=AuditActorType.ADMIN, action="BALANCE_ADJUSTMENT",
         resource_type="account", resource_id=account.id,
         previous_data={"balance": str(ledger_entry.balance_before)},
-        new_data={"balance": str(ledger_entry.balance_after)},
+        new_data={
+            "balance": str(ledger_entry.balance_after),
+            "account_number": account.account_number, "account_type": account.account_type.value,
+        },
         reason=payload.reason, ip_address=ip_address,
     )
     await db.commit()
@@ -138,10 +154,11 @@ async def adjust_user_balance(
     await publish_to_user(user_id, WSEvent.ADMIN_ACCOUNT_ADJUSTED, {
         "adjustment_type": payload.adjustment_type.value, "amount": str(payload.amount),
         "balance_after": str(ledger_entry.balance_after), "reason": payload.reason,
+        "account_id": str(account.id),
     })
     await publish_to_user(user_id, WSEvent.ACCOUNT_BALANCE_UPDATED, {
         "available_balance": str(account.available_balance), "locked_balance": str(account.locked_balance),
-        "currency": account.currency,
+        "currency": account.currency, "account_id": str(account.id),
     })
     await publish_to_user(user_id, WSEvent.PORTFOLIO_UPDATED, {"reason": "admin_adjustment"})
     return adjustment

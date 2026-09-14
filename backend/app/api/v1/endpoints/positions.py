@@ -19,14 +19,20 @@ router = APIRouter()
 async def list_positions(
     status_filter: str | None = Query(default=None, pattern="^(open|closed)$"),
     account_type: str | None = Query(default=None, pattern="^(demo|real)$"),
+    account_id: uuid.UUID | None = None,
     limit: int = Query(default=200, ge=1, le=500),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Open positions by default-ish: passing no filter returns both states, so
     the closed-trade history can read from the same endpoint. Closed rows are
-    ordered by when they closed, open rows by when they opened."""
+    ordered by when they closed, open rows by when they opened.
+
+    `account_id` scopes to one account, which is what keeps a demo and a real
+    account's positions apart; `account_type` is the coarser fallback."""
     query = select(Position).where(Position.user_id == user.id)
+    if account_id:
+        query = query.where(Position.account_id == account_id)
     if account_type:
         query = query.where(Position.account_type == AccountType(account_type))
     if status_filter:

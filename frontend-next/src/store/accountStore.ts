@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 
 import { api } from '@/lib/apiClient'
+import { activeAccountQuery } from '@/store/accountsStore'
 import type { LedgerEntry, WalletSummary } from '@/types/wallet'
 
 interface AccountState {
@@ -20,7 +21,9 @@ export const useAccountStore = create<AccountState>((set) => ({
   fetchWallet: async () => {
     set({ isLoading: true })
     try {
-      const wallet = await api.get<WalletSummary>('/wallet')
+      // Both scoped to the selected account: unscoped, the wallet reported the
+      // primary demo account and the ledger mixed every account together.
+      const wallet = await api.get<WalletSummary>(`/wallet?${activeAccountQuery()}`)
       set({ wallet, isLoading: false })
     } catch (err) {
       set({ isLoading: false })
@@ -29,7 +32,7 @@ export const useAccountStore = create<AccountState>((set) => ({
   },
 
   fetchTransactions: async () => {
-    const transactions = await api.get<LedgerEntry[]>('/wallet/transactions')
+    const transactions = await api.get<LedgerEntry[]>(`/wallet/transactions?${activeAccountQuery()}`)
     set({ transactions })
   },
 

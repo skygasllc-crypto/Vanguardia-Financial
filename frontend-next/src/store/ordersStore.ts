@@ -1,15 +1,17 @@
 import { create } from 'zustand'
 
 import { api } from '@/lib/apiClient'
-import { useAccountTypeStore } from '@/store/accountTypeStore'
-import type { AccountType, Order, OrderCreate, Trade } from '@/types/trading'
+import { activeAccountQuery } from '@/store/accountsStore'
+import type { Order, OrderCreate, Trade } from '@/types/trading'
 
 interface OrdersState {
   orders: Order[]
   trades: Trade[]
   isSubmitting: boolean
-  fetchOrders: (accountType?: AccountType) => Promise<void>
-  fetchTrades: (accountType?: AccountType) => Promise<void>
+  /** Orders on the selected account. */
+  fetchOrders: () => Promise<void>
+  /** Executions on the selected account. */
+  fetchTrades: () => Promise<void>
   placeOrder: (payload: OrderCreate) => Promise<Order>
   cancelOrder: (orderId: string) => Promise<void>
   upsertOrder: (order: Order) => void
@@ -21,16 +23,14 @@ export const useOrdersStore = create<OrdersState>((set, get) => ({
   trades: [],
   isSubmitting: false,
 
-  // Scoped to a book when given one: a real account listing demo orders is
-  // the same routing bug seen from the read side.
-  fetchOrders: async (accountType) => {
-    const book = accountType ?? useAccountTypeStore.getState().accountType
-    set({ orders: await api.get<Order[]>(`/orders?account_type=${book}`) })
+  // Scoped to the selected account: a real account listing demo orders is the
+  // same routing bug seen from the read side.
+  fetchOrders: async () => {
+    set({ orders: await api.get<Order[]>(`/orders?${activeAccountQuery()}`) })
   },
 
-  fetchTrades: async (accountType) => {
-    const book = accountType ?? useAccountTypeStore.getState().accountType
-    set({ trades: await api.get<Trade[]>(`/trades?account_type=${book}`) })
+  fetchTrades: async () => {
+    set({ trades: await api.get<Trade[]>(`/trades?${activeAccountQuery()}`) })
   },
 
   placeOrder: async (payload) => {

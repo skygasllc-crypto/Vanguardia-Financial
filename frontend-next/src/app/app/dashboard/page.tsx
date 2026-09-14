@@ -14,7 +14,6 @@ import { useAccountsStore } from '@/store/accountsStore'
 import { Skeleton } from '@/components/common/Spinner'
 import { StatCard } from '@/components/common/StatCard'
 import { useAccountStore } from '@/store/accountStore'
-import { useAccountTypeStore } from '@/store/accountTypeStore'
 import { useAuthStore } from '@/store/authStore'
 import { useMarketStore } from '@/store/marketStore'
 import { usePortfolioStore } from '@/store/portfolioStore'
@@ -38,29 +37,23 @@ function buildSyntheticHistory(currentValue: number): { time: number; value: num
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user)
   const summary = usePortfolioStore((s) => s.summary)
-  const fetchPortfolio = usePortfolioStore((s) => s.fetchPortfolio)
   const activeAccountId = useAccountsStore((s) => s.activeAccountId)
   const fetchAccounts = useAccountsStore((s) => s.fetchAccounts)
   const assets = useMarketStore((s) => s.assets)
   const watchlist = useWatchlistStore((s) => s.items)
   const transactions = useAccountStore((s) => s.transactions)
   const fetchTransactions = useAccountStore((s) => s.fetchTransactions)
-  const accountType = useAccountTypeStore((s) => s.accountType)
   const [range, setRange] = useState<(typeof RANGES)[number]>('1M')
 
+  // The portfolio follows the account switcher via the app shell; the recent
+  // activity list is this page's own, so it reloads on a switch too.
   useEffect(() => {
-    fetchTransactions().catch(() => undefined)
-  }, [fetchTransactions])
+    if (activeAccountId) fetchTransactions().catch(() => undefined)
+  }, [activeAccountId, fetchTransactions])
 
-  // Refetch whenever the selected account changes, so the figures follow the
-  // account switcher rather than staying on whichever one loaded first.
   useEffect(() => {
     fetchAccounts().catch(() => undefined)
   }, [fetchAccounts])
-
-  useEffect(() => {
-    fetchPortfolio(accountType, activeAccountId ?? undefined).catch(() => undefined)
-  }, [accountType, activeAccountId, fetchPortfolio])
 
   const history = useMemo(() => buildSyntheticHistory(Number(summary?.total_portfolio_value ?? 0)), [summary?.total_portfolio_value, range])
 

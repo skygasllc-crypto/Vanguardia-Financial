@@ -16,7 +16,6 @@ import { TradingWatchlistSidebar } from '@/components/trading/TradingWatchlistSi
 import { useResizablePanels } from '@/hooks/useResizablePanels'
 import { api } from '@/lib/apiClient'
 import { websocketService } from '@/lib/websocketService'
-import { useAccountTypeStore } from '@/store/accountTypeStore'
 import { useMarketStore } from '@/store/marketStore'
 import { usePortfolioStore } from '@/store/portfolioStore'
 import { usePositionsStore } from '@/store/positionsStore'
@@ -46,8 +45,6 @@ function TradingTerminal() {
   const fetchDataStatus = useMarketStore((s) => s.fetchDataStatus)
   const watchlist = useWatchlistStore((s) => s.items)
   const positions = usePositionsStore((s) => s.positions)
-  const fetchPortfolio = usePortfolioStore((s) => s.fetchPortfolio)
-  const accountType = useAccountTypeStore((s) => s.accountType)
   const summary = usePortfolioStore((s) => s.summary)
 
   const symbol = (routeSymbol ?? 'BTC').toUpperCase()
@@ -71,16 +68,13 @@ function TradingTerminal() {
     max: PANEL_MAX,
   })
 
+  // The portfolio is loaded by the app shell, which reloads it whenever the
+  // selected account changes.
   useEffect(() => {
     if (Object.keys(assets).length === 0) fetchMarkets().catch(() => undefined)
     fetchDataStatus().catch(() => undefined)
-    fetchPortfolio(accountType).catch(() => undefined)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountType])
-
-  useEffect(() => {
-    fetchPortfolio(accountType).catch(() => undefined)
-  }, [accountType, fetchPortfolio])
+  }, [])
 
   useEffect(() => {
     setOpenTabs((prev) => (prev.includes(symbol) ? prev : [...prev, symbol]))

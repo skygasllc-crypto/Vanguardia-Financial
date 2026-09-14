@@ -38,6 +38,8 @@ export interface AdminUserFinancialProfile {
 
 export interface BalanceAdjustmentRequest {
   adjustment_type: 'credit' | 'debit'
+  /** Target account; omitted, the backend uses the user's real account. */
+  account_id?: string
   amount: number
   currency: string
   reason: string

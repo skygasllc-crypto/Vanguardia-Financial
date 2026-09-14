@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 
 import { api } from '@/lib/apiClient'
+import { useAccountTypeStore } from '@/store/accountTypeStore'
 import type { AccountCreatePayload, EquityPoint, TradingAccount } from '@/types/account'
 import type { Order, Position } from '@/types/trading'
 import type { LedgerEntry } from '@/types/wallet'
@@ -43,6 +44,7 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
         activeAccountId: stillValid ? stored : (fallback?.id ?? null),
         isLoading: false,
       })
+      syncAccountType(get().getActiveAccount())
     } catch (err) {
       set({ isLoading: false })
       throw err
@@ -57,6 +59,7 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
 
   setActiveAccount: (accountId) => {
     set({ activeAccountId: accountId })
+    syncAccountType(get().accounts.find((a) => a.id === accountId))
     try {
       window.localStorage.setItem(ACTIVE_KEY, accountId)
     } catch {
@@ -81,6 +84,21 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
     return accounts.find((a) => a.id === activeAccountId)
   },
 }))
+
+/** Keeps the demo/real book in step with the selected account. It was a
+ * separate setting with no control left to change it, so it stayed on demo:
+ * a user on a real account saw that account's balance beside demo positions. */
+function syncAccountType(account: TradingAccount | undefined): void {
+  if (account) useAccountTypeStore.getState().setAccountType(account.account_type)
+}
+
+/** Query string scoping a request to the selected account, so each account —
+ * demo or real — reads its own portfolio, positions, orders and ledger. Falls
+ * back to the book only before the account list has loaded. */
+export function activeAccountQuery(): string {
+  const id = useAccountsStore.getState().activeAccountId
+  return id ? `account_id=${id}` : `account_type=${useAccountTypeStore.getState().accountType}`
+}
 
 function readStoredActive(): string | null {
   try {
