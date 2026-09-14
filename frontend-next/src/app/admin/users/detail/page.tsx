@@ -85,6 +85,7 @@ function UserFinancialProfile() {
         </div>
       </div>
 
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Real account figures · demo accounts not included</p>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="Available Balance" value={formatCurrency(user.available_balance, user.currency)} />
         <StatCard label="Total Account Value" value={formatCurrency(user.total_account_value, user.currency)} />
@@ -190,9 +191,10 @@ function UserFinancialProfile() {
 
       {tab === 'Trading Activity' && (
         <div className="space-y-6">
-          <RecordsTable title="Open Orders" rows={profile.open_orders} columns={['symbol', 'side', 'order_type', 'quantity', 'status']} />
+          {/* These lists cover every account, so each row says which kind it's on. */}
+          <RecordsTable title="Open Orders" rows={profile.open_orders} columns={['account_type', 'symbol', 'side', 'order_type', 'quantity', 'status']} />
           <RecordsTable title="Trade History" rows={profile.trade_history} columns={['symbol', 'side', 'quantity', 'execution_price', 'total_value', 'executed_at']} />
-          <RecordsTable title="Position History" rows={profile.position_history} columns={['symbol', 'quantity', 'average_entry_price', 'status', 'opened_at']} />
+          <RecordsTable title="Position History" rows={profile.position_history} columns={['account_type', 'symbol', 'quantity', 'average_entry_price', 'status', 'opened_at']} />
         </div>
       )}
 

@@ -9,10 +9,12 @@ from decimal import Decimal
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.account import Account
 from app.models.admin_adjustment import AdminAdjustment
 from app.models.admin_position import AdminPosition
 from app.models.enums import (
+    AccountType,
     AdjustmentType,
     AuditActorType,
     OrderStatus,
@@ -22,6 +24,7 @@ from app.models.enums import (
 from app.models.order import Order
 from app.models.position import Position
 from app.models.trade import Trade
+from app.models.transaction_ledger import TransactionLedger
 from app.models.user import User
 from app.models.user_financial_settings import UserFinancialSettings
 from app.schemas.admin import AdminPositionCreate, AdminPositionUpdate, AdminUserRow, BalanceAdjustmentRequest, UserFinancialSettingsUpdate
@@ -49,52 +52,81 @@ async def list_users_with_financials(db: AsyncSession, search: str | None, page:
 
 
 async def build_admin_user_row(db: AsyncSession, user: User) -> AdminUserRow:
-    account = await get_or_create_account(db, user.id, "demo", currency="USD")
+    """A user's figures for the admin list and detail page, from their real
+    accounts in the platform currency.
+
+    This used to read the demo account's balance (opening a demo account as a
+    side effect of merely viewing the list) while P&L, volume and counts summed
+    every account, demo included. Real accounts in a crypto currency, opened by
+    deposits, are left out: their balances are in another unit and cannot be
+    added to USD. They are still listed per account on the user's detail page.
+    """
+    currency = settings.DEFAULT_ACCOUNT_CURRENCY
+    real_accounts = (await db.execute(
+        select(Account).where(
+            Account.user_id == user.id,
+            Account.account_type == AccountType.REAL,
+            Account.currency == currency,
+            Account.is_active == True,  # noqa: E712
+        )
+    )).scalars().all()
+    account_ids = [a.id for a in real_accounts]
+    available = sum((a.available_balance for a in real_accounts), Decimal(0))
+    locked = sum((a.locked_balance for a in real_accounts), Decimal(0))
 
     unrealized = (await db.execute(
         select(func.coalesce(func.sum(Position.unrealized_profit_loss), 0)).where(
-            Position.user_id == user.id, Position.status == PositionStatus.OPEN
+            Position.account_id.in_(account_ids), Position.status == PositionStatus.OPEN
         )
     )).scalar_one()
 
+    # A Trade has no account of its own; it belongs to one through its position.
+    trades_on_real = (
+        select(Trade)
+        .join(Position, Position.id == Trade.position_id)
+        .where(Position.account_id.in_(account_ids))
+        .subquery()
+    )
     realized = (await db.execute(
-        select(func.coalesce(func.sum(Trade.realized_profit_loss), 0)).where(Trade.user_id == user.id)
+        select(func.coalesce(func.sum(trades_on_real.c.realized_profit_loss), 0))
     )).scalar_one()
-
     volume = (await db.execute(
-        select(func.coalesce(func.sum(Trade.total_value), 0)).where(Trade.user_id == user.id)
+        select(func.coalesce(func.sum(trades_on_real.c.total_value), 0))
     )).scalar_one()
 
     open_positions_count = (await db.execute(
-        select(func.count()).where(Position.user_id == user.id, Position.status == PositionStatus.OPEN)
+        select(func.count()).where(Position.account_id.in_(account_ids), Position.status == PositionStatus.OPEN)
     )).scalar_one()
 
     open_orders_count = (await db.execute(
-        select(func.count()).where(Order.user_id == user.id, Order.status.in_([OrderStatus.PENDING, OrderStatus.OPEN]))
+        select(func.count()).where(
+            Order.account_id.in_(account_ids), Order.status.in_([OrderStatus.PENDING, OrderStatus.OPEN])
+        )
     )).scalar_one()
 
-    deposits = (await db.execute(
-        select(func.coalesce(func.sum(AdminAdjustment.amount), 0)).where(
-            AdminAdjustment.user_id == user.id, AdminAdjustment.adjustment_type == AdjustmentType.CREDIT
-        )
-    )).scalar_one()
-    withdrawals = (await db.execute(
-        select(func.coalesce(func.sum(AdminAdjustment.amount), 0)).where(
-            AdminAdjustment.user_id == user.id, AdminAdjustment.adjustment_type == AdjustmentType.DEBIT
-        )
-    )).scalar_one()
+    # Only adjustments that landed on these accounts: an admin can also fund a
+    # demo account, and that is not money in or out of the real one.
+    async def adjusted(kind: AdjustmentType):
+        return (await db.execute(
+            select(func.coalesce(func.sum(AdminAdjustment.amount), 0))
+            .join(TransactionLedger, TransactionLedger.id == AdminAdjustment.transaction_id)
+            .where(TransactionLedger.account_id.in_(account_ids), AdminAdjustment.adjustment_type == kind)
+        )).scalar_one()
+
+    deposits = await adjusted(AdjustmentType.CREDIT)
+    withdrawals = await adjusted(AdjustmentType.DEBIT)
 
     return AdminUserRow(
         id=user.id, display_id=user.display_id, full_name=user.full_name, email=user.email, username=user.username,
         status=user.status, is_verified=user.is_verified, created_at=user.created_at,
         last_login_at=user.last_login_at,
-        available_balance=account.available_balance, locked_balance=account.locked_balance,
-        total_account_value=account.available_balance + account.locked_balance + Decimal(unrealized or 0),
+        available_balance=available, locked_balance=locked,
+        total_account_value=available + locked + Decimal(unrealized or 0),
         total_deposits=Decimal(deposits or 0), total_withdrawals=Decimal(withdrawals or 0),
         total_realized_pnl=Decimal(realized or 0), total_unrealized_pnl=Decimal(unrealized or 0),
         total_trading_volume=Decimal(volume or 0),
         open_positions_count=open_positions_count, open_orders_count=open_orders_count,
-        currency=account.currency, risk_status=user.risk_status,
+        currency=currency, risk_status=user.risk_status,
     )
 
 

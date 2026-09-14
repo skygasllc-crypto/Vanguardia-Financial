@@ -93,6 +93,9 @@ export default function AdminUsersPage() {
         />
         <Button variant="secondary" size="sm">Export Users (CSV)</Button>
       </div>
+      <p className="text-xs text-slate-500">
+        Balances, P&amp;L, volume, positions and orders are from each user&apos;s real accounts. Demo accounts are not included.
+      </p>
 
       <Card padded={false}>
         <div className="overflow-x-auto">
