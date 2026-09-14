@@ -7,11 +7,13 @@ import { Badge } from '@/components/common/Badge'
 import { Button } from '@/components/common/Button'
 import { Card, CardHeader } from '@/components/common/Card'
 import { EmptyState } from '@/components/common/EmptyState'
+import { PnLText } from '@/components/common/PnLText'
 import { StatCard } from '@/components/common/StatCard'
 import { usePositionsStore } from '@/store/positionsStore'
 import { useAccountStore } from '@/store/accountStore'
 import { useAccountsStore } from '@/store/accountsStore'
 import { formatCurrency, formatDateTime, formatNumber } from '@/lib/format'
+import { signedLedgerAmount } from '@/lib/ledger'
 
 export default function WalletPage() {
   const wallet = useAccountStore((s) => s.wallet)
@@ -100,7 +102,7 @@ export default function WalletPage() {
                     <td className="py-2.5 font-mono text-xs text-slate-400">{tx.transaction_ref}</td>
                     <td className="py-2.5"><Badge tone="neutral">{tx.transaction_type.replace(/_/g, ' ')}</Badge></td>
                     <td className="py-2.5 text-slate-500">{tx.description ?? '—'}</td>
-                    <td className="py-2.5 font-medium tabular-nums text-navy-900">{formatCurrency(tx.amount, tx.currency)}</td>
+                    <td className="py-2.5"><PnLText value={signedLedgerAmount(tx)} currency={tx.currency} /></td>
                     <td className="py-2.5 tabular-nums text-slate-600">{formatCurrency(tx.balance_after, tx.currency)}</td>
                     <td className="py-2.5 text-slate-400">{formatDateTime(tx.created_at)}</td>
                   </tr>

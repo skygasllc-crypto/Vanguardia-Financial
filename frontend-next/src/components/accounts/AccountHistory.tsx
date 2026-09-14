@@ -13,6 +13,7 @@ import type { Order, Position } from '@/types/trading'
 import type { LedgerEntry } from '@/types/wallet'
 import { cn } from '@/lib/cn'
 import { formatCurrency, formatDateTime, formatNumber } from '@/lib/format'
+import { signedLedgerAmount } from '@/lib/ledger'
 
 const TABS = ['Transactions', 'Orders', 'Positions'] as const
 
@@ -117,7 +118,7 @@ export function AccountHistory({ account }: { account: TradingAccount }) {
             render={(t: LedgerEntry) => (
               <>
                 <Cell><Badge tone="neutral" className="capitalize">{String(t.transaction_type).replace(/_/g, ' ')}</Badge></Cell>
-                <Cell><PnLText value={t.amount} size="sm" /></Cell>
+                <Cell><PnLText value={signedLedgerAmount(t)} currency={t.currency} size="sm" /></Cell>
                 <Cell>{formatCurrency(t.balance_after)}</Cell>
                 <Cell className="max-w-[240px] truncate text-slate-500">{t.description || '—'}</Cell>
                 <Cell className="text-xs">{formatDateTime(t.created_at)}</Cell>

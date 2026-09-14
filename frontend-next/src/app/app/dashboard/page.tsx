@@ -18,6 +18,7 @@ import { useMarketStore } from '@/store/marketStore'
 import { usePortfolioStore } from '@/store/portfolioStore'
 import { useWatchlistStore } from '@/store/watchlistStore'
 import { formatCurrency, formatDateTime, formatNumber, formatPercent } from '@/lib/format'
+import { signedLedgerAmount } from '@/lib/ledger'
 
 const RANGES = ['1D', '1W', '1M', '3M', '1Y', 'ALL'] as const
 
@@ -209,7 +210,7 @@ export default function DashboardPage() {
                   <tr key={tx.id} className="border-b border-slate-50 last:border-0">
                     <td className="py-2.5"><Badge tone="neutral">{tx.transaction_type.replace(/_/g, ' ')}</Badge></td>
                     <td className="py-2.5 text-slate-500">{tx.description ?? '—'}</td>
-                    <td className="py-2.5 font-medium tabular-nums text-navy-900">{formatCurrency(tx.amount, tx.currency)}</td>
+                    <td className="py-2.5"><PnLText value={signedLedgerAmount(tx)} currency={tx.currency} /></td>
                     <td className="py-2.5 tabular-nums text-slate-600">{formatCurrency(tx.balance_after, tx.currency)}</td>
                     <td className="py-2.5 text-slate-400">{formatDateTime(tx.created_at)}</td>
                   </tr>
